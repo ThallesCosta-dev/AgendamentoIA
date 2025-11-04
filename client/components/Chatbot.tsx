@@ -71,7 +71,7 @@ export default function Chatbot() {
       id: `msg-${messageCounterRef.current}`,
       type: "bot",
       content:
-        "Olá! 👋 Bem-vindo ao assistente de agendamento de salas para defesa de tese. Sou aqui para ajudá-lo a reservar uma sala. Por favor, comece nos informando seu nome completo.",
+        "Olá! 👋 Bem-vindo ao assistente de agendamento de salas para defesa de tese. Estou aqui para ajudá-lo a reservar uma sala. Por favor, comece nos informando seu nome completo.",
       timestamp: new Date(),
       role: "assistant",
     };
@@ -162,24 +162,50 @@ export default function Chatbot() {
     }
 
     // Time pattern (HH:mm or just HH with h/horas)
-    const timeMatches = text.match(/(\d{1,2})(?::(\d{2}))?\s*(?:h|horas?)?/g);
-    if (timeMatches) {
-      // Filter valid times
-      const validTimes = timeMatches.filter((t) => {
-        const hour = parseInt(t.split(":")[0]);
-        return hour >= 0 && hour <= 23;
-      });
+    const validTimes = [];
 
-      if (validTimes.length >= 1) {
-        const firstTime = validTimes[0];
-        const [hh, mm] = firstTime.split(":");
-        data.startTime = `${hh.padStart(2, "0")}:${(mm || "00").padStart(2, "0")}`;
+    // First try to match explicit time formats (HH:mm or HH h/horas)
+    const explicitTimeMatches = text.match(/(\d{1,2}):(\d{2})\s*(?:h|horas)?|(\d{1,2})\s*(?:h|horas)/g);
+    if (explicitTimeMatches) {
+      for (const timeStr of explicitTimeMatches) {
+        // Parse HH:mm format
+        const colonMatch = timeStr.match(/(\d{1,2}):(\d{2})/);
+        if (colonMatch) {
+          const hour = parseInt(colonMatch[1]);
+          if (hour >= 0 && hour <= 23) {
+            validTimes.push(`${colonMatch[1].padStart(2, "0")}:${colonMatch[2]}`);
+          }
+          continue;
+        }
+
+        // Parse HH format (with h or horas)
+        const hMatch = timeStr.match(/(\d{1,2})\s*(?:h|horas)/);
+        if (hMatch) {
+          const hour = parseInt(hMatch[1]);
+          if (hour >= 0 && hour <= 23) {
+            validTimes.push(`${hMatch[1].padStart(2, "0")}:00`);
+          }
+        }
       }
-      if (validTimes.length >= 2) {
-        const secondTime = validTimes[1];
-        const [hh, mm] = secondTime.split(":");
-        data.endTime = `${hh.padStart(2, "0")}:${(mm || "00").padStart(2, "0")}`;
+    }
+
+    // If no explicit times found, try to match plain numbers (0-23) only if text is very short
+    // This helps capture "15" or "16" as times, but won't match date numbers in longer strings
+    if (validTimes.length === 0 && text.trim().length <= 3) {
+      const plainNumberMatch = text.match(/^(\d{1,2})$/);
+      if (plainNumberMatch) {
+        const num = parseInt(plainNumberMatch[1]);
+        if (num >= 0 && num <= 23) {
+          validTimes.push(`${num.toString().padStart(2, "0")}:00`);
+        }
       }
+    }
+
+    if (validTimes.length >= 1) {
+      data.startTime = validTimes[0];
+    }
+    if (validTimes.length >= 2) {
+      data.endTime = validTimes[1];
     }
 
     // Duration pattern (numbers followed by minuto/min/h/hora)
@@ -537,7 +563,7 @@ export default function Chatbot() {
             fieldToUpdate,
           );
           addBotMessage(
-            `✅ Agendamento #${currentBookingId} modificado com sucesso!\n\n📋 Dados atualizados:\n📍 Sala: ${updatedBooking.roomName}\n📅 Data: ${new Date(updatedBooking.date).toLocaleDateString("pt-BR")}\n⏰ Horário: ${updatedBooking.startTime} - ${updatedBooking.endTime}\n👤 Nome: ${updatedBooking.clientName}\n📧 Email: ${updatedBooking.clientEmail}`,
+            `✅ Agendamento #${currentBookingId} modificado com sucesso!\n\n📋 Dados atualizados:\n📍 Sala: ${updatedBooking.roomName}\n�� Data: ${new Date(updatedBooking.date).toLocaleDateString("pt-BR")}\n⏰ Horário: ${updatedBooking.startTime} - ${updatedBooking.endTime}\n👤 Nome: ${updatedBooking.clientName}\n📧 Email: ${updatedBooking.clientEmail}`,
           );
           setCurrentFlow("booking");
           setCurrentBookingId("");
@@ -563,6 +589,12 @@ export default function Chatbot() {
       // If we're selecting a room, don't override the name
       if (!shouldExtractName && extractedData.name) {
         extractedData.name = undefined;
+      }
+
+      // If we already have a startTime and a new time is extracted, use it as endTime
+      if (formData.startTime && !formData.endTime && extractedData.startTime) {
+        extractedData.endTime = extractedData.startTime;
+        extractedData.startTime = undefined;
       }
 
       console.log("Extracted data:", extractedData);
@@ -599,6 +631,45 @@ export default function Chatbot() {
         extractedData.endTime
       ) {
         setFormData(updatedFormData);
+
+        // Reset available rooms if date/time changed (so we re-check availability)
+        if (extractedData.date || extractedData.startTime || extractedData.endTime) {
+          setAvailableRooms([]);
+        }
+      }
+
+      // FIRST: Check if user is trying to select a room (before checking availability)
+      if (availableRooms.length > 0 && !updatedFormData.selectedRoomId) {
+        const roomSelection = availableRooms.find((r) =>
+          userInput.toLowerCase().includes(r.name.toLowerCase()),
+        );
+
+        if (roomSelection) {
+          console.log("Room selected:", roomSelection.name);
+          const updatedDataWithRoom = {
+            ...updatedFormData,
+            selectedRoomId: roomSelection.id,
+          };
+
+          setFormData(updatedDataWithRoom);
+
+          const confirmMessage = `Você selecionou a sala "${roomSelection.name}".\n\n📋 Resumo:\n👤 ${updatedDataWithRoom.name}\n📧 ${updatedDataWithRoom.email}\n📅 ${updatedDataWithRoom.date}\n⏰ ${updatedDataWithRoom.startTime} - ${updatedDataWithRoom.endTime}\n📍 ${roomSelection.name}\n\nDeseja confirmar este agendamento?`;
+          addBotMessage(confirmMessage);
+          setConversationHistory((prev) => [
+            ...prev,
+            { role: "user" as const, content: userInput },
+            { role: "assistant", content: confirmMessage },
+          ]);
+
+          // Store the selected room ID and updated data for the next confirmation step
+          sessionStorage.setItem(
+            "pendingBooking",
+            JSON.stringify(updatedDataWithRoom)
+          );
+
+          setIsLoading(false);
+          return;
+        }
       }
 
       // Check if we have all booking details to check availability
@@ -609,13 +680,23 @@ export default function Chatbot() {
         updatedFormData.startTime &&
         updatedFormData.endTime;
 
-      if (hasAllDetails && !availableRooms.length) {
-        // We have all details but haven't checked availability yet
+      console.log("Has all details:", {
+        hasAllDetails,
+        availableRoomsLength: availableRooms.length,
+        name: updatedFormData.name,
+        email: updatedFormData.email,
+        date: updatedFormData.date,
+        startTime: updatedFormData.startTime,
+        endTime: updatedFormData.endTime,
+      });
+
+      if (hasAllDetails && !updatedFormData.selectedRoomId && availableRooms.length === 0) {
+        // We have all details and haven't selected a room yet - check availability
         const date = updatedFormData.date!;
         const startTime = updatedFormData.startTime!;
         const endTime = updatedFormData.endTime!;
 
-        console.log("Checking availability for:", date, startTime, endTime);
+        console.log("✅ Checking availability for:", date, startTime, endTime);
 
         const endMinutes =
           parseInt(endTime.split(":")[0]) * 60 +
@@ -682,51 +763,19 @@ export default function Chatbot() {
         }
       }
 
-      // Check if user is trying to select a room
-      if (availableRooms.length > 0 && !formData.selectedRoomId) {
-        const roomSelection = availableRooms.find((r) =>
-          userInput.toLowerCase().includes(r.name.toLowerCase()),
-        );
-
-        if (roomSelection) {
-          const updatedData = {
-            ...updatedFormData,
-            selectedRoomId: roomSelection.id,
-          };
-
-          setFormData(updatedData);
-
-          const confirmMessage = `Você selecionou a sala "${roomSelection.name}".\n\n📋 Resumo:\n👤 ${updatedFormData.name}\n📧 ${updatedFormData.email}\n📅 ${updatedFormData.date}\n⏰ ${updatedFormData.startTime} - ${updatedFormData.endTime}\n📍 ${roomSelection.name}\n\nDeseja confirmar este agendamento?`;
-          addBotMessage(confirmMessage);
-          setConversationHistory((prev) => [
-            ...prev,
-            { role: "user" as const, content: userInput },
-            { role: "assistant", content: confirmMessage },
-          ]);
-
-          // Store the selected room ID and updated data for the next confirmation step
-          sessionStorage.setItem(
-            "pendingBooking",
-            JSON.stringify(updatedData)
-          );
-
-          setIsLoading(false);
-          return;
-        }
-      }
 
       // Handle confirmation
       if (
         (userInput.toLowerCase().includes("sim") ||
           userInput.toLowerCase().includes("yes")) &&
-        formData.selectedRoomId
+        updatedFormData.selectedRoomId
       ) {
         if (
-          formData.name &&
-          formData.email &&
-          formData.date &&
-          formData.startTime &&
-          formData.endTime
+          updatedFormData.name &&
+          updatedFormData.email &&
+          updatedFormData.date &&
+          updatedFormData.startTime &&
+          updatedFormData.endTime
         ) {
           // Use the stored pending booking data to ensure all fields are set
           const pendingBooking = sessionStorage.getItem("pendingBooking");
