@@ -85,6 +85,21 @@ export default function Chatbot() {
     ]);
   }, []);
 
+  const convertDateToISO = (dateStr: string): string => {
+    // If already in ISO format (YYYY-MM-DD), return as is
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return dateStr;
+    }
+
+    // Convert DD/MM/YYYY to YYYY-MM-DD
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
+      const [day, month, year] = dateStr.split("/");
+      return `${year}-${month}-${day}`;
+    }
+
+    return dateStr;
+  };
+
   const extractDataFromText = (text: string): ExtractedData => {
     const data: ExtractedData = {};
 
@@ -116,7 +131,7 @@ export default function Chatbot() {
     if (isoDateMatch) {
       data.date = isoDateMatch[1];
     } else if (dateSlashMatch) {
-      data.date = dateSlashMatch[1];
+      data.date = convertDateToISO(dateSlashMatch[1]);
     } else {
       // Try Portuguese date format
       const ptDateMatch = text.match(
@@ -205,44 +220,6 @@ export default function Chatbot() {
     }
   };
 
-  const createBooking = async () => {
-    try {
-      setIsLoading(true);
-
-      const response = await fetch("/api/bookings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          roomId: formData.selectedRoomId,
-          clientName: formData.name,
-          clientEmail: formData.email,
-          date: formData.date,
-          startTime: formData.startTime,
-          endTime: formData.endTime,
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to create booking");
-      }
-
-      const data = await response.json();
-      setBooking(data.booking);
-
-      const successMessage = `✅ Perfeito! Sua defesa foi agendada com sucesso!\n\n📌 **ID da Reserva: #${data.booking.id}**\n\nDetalhes da Reserva:\n📍 Sala: ${data.booking.roomName}\n📅 Data: ${new Date(formData.date).toLocaleDateString("pt-BR")}\n⏰ Horário: ${formData.startTime} - ${formData.endTime}\n📧 Confirmação enviada para: ${formData.email}\n\nGuarde este ID para futuras modificações ou cancelamentos!\n\nObrigado por usar nosso assistente!`;
-
-      addBotMessage(successMessage);
-      toast.success("Agendamento confirmado!");
-    } catch (error) {
-      console.error("Error creating booking:", error);
-      toast.error(
-        error instanceof Error ? error.message : "Erro ao confirmar reserva",
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const fetchBookingDetails = async (bookingId: string) => {
     try {
@@ -579,7 +556,15 @@ export default function Chatbot() {
       }
 
       // Regular booking flow - send message to AI
+      // Don't extract name if we're in room selection phase (to avoid capturing room names)
+      const shouldExtractName = availableRooms.length === 0;
       const extractedData = extractDataFromText(userInput);
+
+      // If we're selecting a room, don't override the name
+      if (!shouldExtractName && extractedData.name) {
+        extractedData.name = undefined;
+      }
+
       console.log("Extracted data:", extractedData);
       console.log("Current formData:", formData);
 
@@ -593,11 +578,12 @@ export default function Chatbot() {
       }
 
       // Build updated form data FIRST
+      const extractedDate = extractedData.date ? convertDateToISO(extractedData.date) : formData.date;
       const updatedFormData = {
         ...formData,
         name: extractedData.name || formData.name,
         email: extractedData.email || formData.email,
-        date: extractedData.date || formData.date,
+        date: extractedDate,
         startTime: extractedData.startTime || formData.startTime,
         endTime: extractedData.endTime || formData.endTime,
       };
@@ -703,18 +689,27 @@ export default function Chatbot() {
         );
 
         if (roomSelection) {
-          setFormData((prev) => ({
-            ...prev,
+          const updatedData = {
+            ...updatedFormData,
             selectedRoomId: roomSelection.id,
-          }));
+          };
 
-          const confirmMessage = `Você selecionou a sala "${roomSelection.name}".\n\n📋 Resumo:\n👤 ${formData.name}\n📧 ${formData.email}\n📅 ${formData.date}\n⏰ ${formData.startTime} - ${formData.endTime}\n📍 ${roomSelection.name}\n\nDeseja confirmar este agendamento?`;
+          setFormData(updatedData);
+
+          const confirmMessage = `Você selecionou a sala "${roomSelection.name}".\n\n📋 Resumo:\n👤 ${updatedFormData.name}\n📧 ${updatedFormData.email}\n📅 ${updatedFormData.date}\n⏰ ${updatedFormData.startTime} - ${updatedFormData.endTime}\n📍 ${roomSelection.name}\n\nDeseja confirmar este agendamento?`;
           addBotMessage(confirmMessage);
           setConversationHistory((prev) => [
             ...prev,
             { role: "user" as const, content: userInput },
             { role: "assistant", content: confirmMessage },
           ]);
+
+          // Store the selected room ID and updated data for the next confirmation step
+          sessionStorage.setItem(
+            "pendingBooking",
+            JSON.stringify(updatedData)
+          );
+
           setIsLoading(false);
           return;
         }
@@ -733,8 +728,65 @@ export default function Chatbot() {
           formData.startTime &&
           formData.endTime
         ) {
-          await createBooking();
-          setIsLoading(false);
+          // Use the stored pending booking data to ensure all fields are set
+          const pendingBooking = sessionStorage.getItem("pendingBooking");
+          if (pendingBooking) {
+            const bookingData = JSON.parse(pendingBooking);
+            setFormData(bookingData);
+
+            // Create booking with the confirmed data
+            try {
+              setIsLoading(true);
+
+              const response = await fetch("/api/bookings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  roomId: bookingData.selectedRoomId,
+                  clientName: bookingData.name,
+                  clientEmail: bookingData.email,
+                  date: bookingData.date,
+                  startTime: bookingData.startTime,
+                  endTime: bookingData.endTime,
+                }),
+              });
+
+              if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || "Failed to create booking");
+              }
+
+              const data = await response.json();
+              setBooking(data.booking);
+              sessionStorage.removeItem("pendingBooking");
+
+              const successMessage = `✅ Perfeito! Sua defesa foi agendada com sucesso!\n\n📌 **ID da Reserva: #${data.booking.id}**\n\nDetalhes da Reserva:\n📍 Sala: ${data.booking.roomName}\n📅 Data: ${new Date(bookingData.date).toLocaleDateString("pt-BR")}\n⏰ Horário: ${bookingData.startTime} - ${bookingData.endTime}\n📧 Confirmação enviada para: ${bookingData.email}\n\nGuarde este ID para futuras modificações ou cancelamentos!\n\nObrigado por usar nosso assistente!`;
+
+              addBotMessage(successMessage);
+              toast.success("Agendamento confirmado!");
+
+              // Reset form data for next booking
+              setFormData({
+                name: "",
+                email: "",
+                date: "",
+                startTime: "",
+                endTime: "",
+                duration: "",
+                equipment: "",
+                selectedRoomId: "",
+              });
+              setAvailableRooms([]);
+              setCurrentFlow("booking");
+            } catch (error) {
+              console.error("Error creating booking:", error);
+              toast.error(
+                error instanceof Error ? error.message : "Erro ao confirmar reserva",
+              );
+            } finally {
+              setIsLoading(false);
+            }
+          }
           return;
         }
       }

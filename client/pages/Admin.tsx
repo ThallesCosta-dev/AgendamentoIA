@@ -93,6 +93,17 @@ export default function Admin() {
   };
 
   const formatDate = (dateString: string) => {
+    // Handle date strings in YYYY-MM-DD format from the database
+    // Split the string to avoid timezone issues with new Date()
+    const [year, month, day] = dateString.split("-");
+    if (year && month && day) {
+      return new Date(
+        parseInt(year),
+        parseInt(month) - 1,
+        parseInt(day),
+      ).toLocaleDateString("pt-BR");
+    }
+    // Fallback for other date formats
     return new Date(dateString).toLocaleDateString("pt-BR");
   };
 
