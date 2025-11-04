@@ -64,6 +64,65 @@ export async function getRooms(): Promise<Room[]> {
   }
 }
 
+export async function getRoomById(id: string): Promise<Room | null> {
+  const connection = await getConnection();
+  try {
+    const [rows] = await connection.execute<RowDataPacket[]>(
+      "SELECT id, name, capacity, created_at FROM rooms WHERE id = ?",
+      [id],
+    );
+
+    if (rows.length === 0) return null;
+
+    const row = rows[0];
+    return {
+      id: String(row.id),
+      name: row.name,
+      capacity: row.capacity,
+      createdAt:
+        row.created_at instanceof Date
+          ? row.created_at.toISOString()
+          : new Date(row.created_at).toISOString(),
+    };
+  } finally {
+    connection.release();
+  }
+}
+
+export async function updateRoomById(
+  id: string,
+  updates: {
+    name?: string;
+    capacity?: number;
+  },
+): Promise<Room> {
+  const connection = await getConnection();
+  try {
+    // Get the current room
+    const currentRoom = await getRoomById(id);
+    if (!currentRoom) {
+      throw new Error(`Room with ID ${id} not found`);
+    }
+
+    const updateName = updates.name ?? currentRoom.name;
+    const updateCapacity = updates.capacity ?? currentRoom.capacity;
+
+    await connection.execute(
+      "UPDATE rooms SET name = ?, capacity = ? WHERE id = ?",
+      [updateName, updateCapacity, id],
+    );
+
+    const updatedRoom = await getRoomById(id);
+    if (!updatedRoom) {
+      throw new Error("Failed to retrieve updated room");
+    }
+
+    return updatedRoom;
+  } finally {
+    connection.release();
+  }
+}
+
 export async function createBooking(
   booking: Omit<Booking, "id" | "createdAt">,
 ): Promise<Booking> {

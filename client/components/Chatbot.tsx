@@ -809,7 +809,10 @@ export default function Chatbot() {
               setBooking(data.booking);
               sessionStorage.removeItem("pendingBooking");
 
-              const successMessage = `✅ Perfeito! Sua defesa foi agendada com sucesso!\n\n📌 **ID da Reserva: #${data.booking.id}**\n\nDetalhes da Reserva:\n📍 Sala: ${data.booking.roomName}\n📅 Data: ${new Date(bookingData.date).toLocaleDateString("pt-BR")}\n⏰ Horário: ${bookingData.startTime} - ${bookingData.endTime}\n📧 Confirmação enviada para: ${bookingData.email}\n\nGuarde este ID para futuras modificações ou cancelamentos!\n\nObrigado por usar nosso assistente!`;
+              // Format date without timezone issues
+              const [year, month, day] = bookingData.date.split("-");
+              const formattedDate = `${day}/${month}/${year}`;
+              const successMessage = `✅ Perfeito! Sua defesa foi agendada com sucesso!\n\n📌 **ID da Reserva: #${data.booking.id}**\n\nDetalhes da Reserva:\n📍 Sala: ${data.booking.roomName}\n📅 Data: ${formattedDate}\n⏰ Horário: ${bookingData.startTime} - ${bookingData.endTime}\n📧 Confirmação enviada para: ${bookingData.email}\n\nGuarde este ID para futuras modificações ou cancelamentos!\n\nObrigado por usar nosso assistente!`;
 
               addBotMessage(successMessage);
               toast.success("Agendamento confirmado!");

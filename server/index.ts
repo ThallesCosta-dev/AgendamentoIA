@@ -7,12 +7,17 @@ import {
   handleListRooms,
   handleCreateRoom,
   handleDeleteRoom,
+  handleGetRoom,
+  handleUpdateRoom,
 } from "./routes/rooms";
 import {
   handleListBookings,
   handleCheckAvailability,
   handleCreateBooking,
   handleGetAvailableTimes,
+  handleGetBooking,
+  handleUpdateBooking,
+  handleDeleteBooking,
 } from "./routes/bookings";
 import { handleChat } from "./routes/chat";
 import {
@@ -35,13 +40,18 @@ export function createServer() {
 
   // Rooms API
   app.get("/api/rooms", handleListRooms);
+  app.get("/api/rooms/:id", handleGetRoom);
   app.post("/api/rooms", handleCreateRoom);
+  app.put("/api/rooms/:id", handleUpdateRoom);
   app.delete("/api/rooms/:id", handleDeleteRoom);
 
   // Bookings API
   app.get("/api/bookings", handleListBookings);
+  app.get("/api/bookings/:id", handleGetBooking);
   app.post("/api/bookings/check-availability", handleCheckAvailability);
   app.post("/api/bookings", handleCreateBooking);
+  app.put("/api/bookings/:id", handleUpdateBooking);
+  app.delete("/api/bookings/:id", handleDeleteBooking);
   app.get("/api/bookings/available-times", handleGetAvailableTimes);
 
   // Chat API (AI powered)

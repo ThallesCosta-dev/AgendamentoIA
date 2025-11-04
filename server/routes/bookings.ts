@@ -12,6 +12,9 @@ import {
   getRooms,
   bookingExists,
   validateInstitutionalEmail,
+  getBookingById,
+  updateBookingById,
+  deleteBookingById,
 } from "../data";
 
 export const handleListBookings: RequestHandler = async (_req, res) => {
@@ -160,5 +163,79 @@ export const handleGetAvailableTimes: RequestHandler = async (req, res) => {
   } catch (error) {
     console.error("Error getting available times:", error);
     res.status(500).json({ error: "Failed to get available times" });
+  }
+};
+
+export const handleGetBooking: RequestHandler = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const booking = await getBookingById(id);
+
+    if (!booking) {
+      res.status(404).json({ error: "Booking not found" });
+      return;
+    }
+
+    res.json(booking);
+  } catch (error) {
+    console.error("Error getting booking:", error);
+    res.status(500).json({ error: "Failed to get booking" });
+  }
+};
+
+export const handleUpdateBooking: RequestHandler = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { clientName, clientEmail, date, startTime, endTime, roomId } =
+      req.body;
+
+    if (!clientName || !clientEmail || !date || !startTime || !endTime) {
+      res.status(400).json({ error: "Missing required fields" });
+      return;
+    }
+
+    // Validate institutional email
+    if (!validateInstitutionalEmail(clientEmail)) {
+      res.status(400).json({
+        error:
+          "Email must be from a Brazilian educational institution (.edu.br)",
+      });
+      return;
+    }
+
+    const booking = await updateBookingById(id, {
+      clientName,
+      clientEmail,
+      date,
+      startTime,
+      endTime,
+      roomId,
+    });
+
+    res.json(booking);
+  } catch (error) {
+    console.error("Error updating booking:", error);
+    if (error instanceof Error && error.message.includes("not found")) {
+      res.status(404).json({ error: "Booking not found" });
+    } else {
+      res.status(500).json({ error: "Failed to update booking" });
+    }
+  }
+};
+
+export const handleDeleteBooking: RequestHandler = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const success = await deleteBookingById(id);
+    if (!success) {
+      res.status(404).json({ error: "Booking not found" });
+      return;
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error("Error deleting booking:", error);
+    res.status(500).json({ error: "Failed to delete booking" });
   }
 };

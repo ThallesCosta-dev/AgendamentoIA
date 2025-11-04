@@ -4,8 +4,17 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Room, Booking } from "@shared/api";
-import { Trash2, Plus, Calendar, Users } from "lucide-react";
+import { Trash2, Plus, Calendar, Users, Edit, X } from "lucide-react";
 import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 export default function Admin() {
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -13,6 +22,22 @@ export default function Admin() {
   const [newRoomName, setNewRoomName] = useState("");
   const [newRoomCapacity, setNewRoomCapacity] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // Edit room modal state
+  const [editRoomModalOpen, setEditRoomModalOpen] = useState(false);
+  const [editingRoom, setEditingRoom] = useState<Room | null>(null);
+  const [editRoomName, setEditRoomName] = useState("");
+  const [editRoomCapacity, setEditRoomCapacity] = useState("");
+
+  // Edit booking modal state
+  const [editBookingModalOpen, setEditBookingModalOpen] = useState(false);
+  const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
+  const [editBookingName, setEditBookingName] = useState("");
+  const [editBookingEmail, setEditBookingEmail] = useState("");
+  const [editBookingDate, setEditBookingDate] = useState("");
+  const [editBookingStartTime, setEditBookingStartTime] = useState("");
+  const [editBookingEndTime, setEditBookingEndTime] = useState("");
+  const [editBookingRoomId, setEditBookingRoomId] = useState("");
 
   useEffect(() => {
     fetchRooms();
@@ -75,6 +100,46 @@ export default function Admin() {
     }
   };
 
+  const openEditRoomModal = (room: Room) => {
+    setEditingRoom(room);
+    setEditRoomName(room.name);
+    setEditRoomCapacity(String(room.capacity));
+    setEditRoomModalOpen(true);
+  };
+
+  const handleUpdateRoom = async () => {
+    if (!editingRoom || !editRoomName.trim() || !editRoomCapacity) {
+      toast.error("Preencha todos os campos");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      const response = await fetch(`/api/rooms/${editingRoom.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editRoomName,
+          capacity: parseInt(editRoomCapacity),
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update room");
+      const updatedRoom = await response.json();
+      setRooms((prev) =>
+        prev.map((r) => (r.id === editingRoom.id ? updatedRoom : r)),
+      );
+      setEditRoomModalOpen(false);
+      setEditingRoom(null);
+      toast.success("Sala atualizada com sucesso!");
+    } catch (error) {
+      console.error("Error updating room:", error);
+      toast.error("Erro ao atualizar sala");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleDeleteRoom = async (roomId: string) => {
     if (!confirm("Tem certeza que deseja deletar esta sala?")) return;
 
@@ -92,18 +157,86 @@ export default function Admin() {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    // Handle date strings in YYYY-MM-DD format from the database
-    // Split the string to avoid timezone issues with new Date()
-    const [year, month, day] = dateString.split("-");
-    if (year && month && day) {
-      return new Date(
-        parseInt(year),
-        parseInt(month) - 1,
-        parseInt(day),
-      ).toLocaleDateString("pt-BR");
+  const openEditBookingModal = (booking: Booking) => {
+    setEditingBooking(booking);
+    setEditBookingName(booking.clientName);
+    setEditBookingEmail(booking.clientEmail);
+    setEditBookingDate(booking.date);
+    setEditBookingStartTime(booking.startTime);
+    setEditBookingEndTime(booking.endTime);
+    setEditBookingRoomId(booking.roomId);
+    setEditBookingModalOpen(true);
+  };
+
+  const handleUpdateBooking = async () => {
+    if (
+      !editingBooking ||
+      !editBookingName.trim() ||
+      !editBookingEmail.trim() ||
+      !editBookingDate ||
+      !editBookingStartTime ||
+      !editBookingEndTime
+    ) {
+      toast.error("Preencha todos os campos");
+      return;
     }
-    // Fallback for other date formats
+
+    try {
+      setIsLoading(true);
+      const response = await fetch(`/api/bookings/${editingBooking.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientName: editBookingName,
+          clientEmail: editBookingEmail,
+          date: editBookingDate,
+          startTime: editBookingStartTime,
+          endTime: editBookingEndTime,
+          roomId: editBookingRoomId,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update booking");
+      const updatedBooking = await response.json();
+      setBookings((prev) =>
+        prev.map((b) => (b.id === editingBooking.id ? updatedBooking : b)),
+      );
+      setEditBookingModalOpen(false);
+      setEditingBooking(null);
+      toast.success("Agendamento atualizado com sucesso!");
+    } catch (error) {
+      console.error("Error updating booking:", error);
+      toast.error("Erro ao atualizar agendamento");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDeleteBooking = async (bookingId: string) => {
+    if (!confirm("Tem certeza que deseja deletar este agendamento?")) return;
+
+    try {
+      const response = await fetch(`/api/bookings/${bookingId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) throw new Error("Failed to delete booking");
+      setBookings((prev) => prev.filter((b) => b.id !== bookingId));
+      toast.success("Agendamento deletado com sucesso!");
+    } catch (error) {
+      console.error("Error deleting booking:", error);
+      toast.error("Erro ao deletar agendamento");
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    // Handle YYYY-MM-DD format without timezone conversion issues
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+      const [year, month, day] = dateString.split("-");
+      return `${day}/${month}/${year}`;
+    }
+
+    // Fallback for other formats
     return new Date(dateString).toLocaleDateString("pt-BR");
   };
 
@@ -118,7 +251,9 @@ export default function Admin() {
           <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-2">
             Painel Administrativo
           </h1>
-          <p className="text-muted-foreground">Gerencie salas e agendamentos</p>
+          <p className="text-muted-foreground">
+            Gerencie salas e agendamentos com edição completa
+          </p>
         </div>
 
         <Tabs defaultValue="rooms" className="w-full">
@@ -189,14 +324,24 @@ export default function Admin() {
                           Capacidade: {room.capacity} pessoas
                         </p>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteRoom(room.id)}
-                        className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openEditRoomModal(room)}
+                          className="text-primary hover:text-primary/80 hover:bg-primary/10"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteRoom(room.id)}
+                          className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   </Card>
                 ))}
@@ -219,29 +364,49 @@ export default function Admin() {
                     key={booking.id}
                     className="p-4 border border-border hover:border-primary/50 transition-colors"
                   >
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <h3 className="font-semibold text-foreground">
-                          {booking.roomName}
-                        </h3>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          Agendado por: {booking.clientName}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          E-mail: {booking.clientEmail}
-                        </p>
+                    <div className="flex justify-between items-start">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
+                        <div>
+                          <h3 className="font-semibold text-foreground">
+                            {booking.roomName}
+                          </h3>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Agendado por: {booking.clientName}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            E-mail: {booking.clientEmail}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-foreground">
+                            📅 {formatDate(booking.date)}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            ⏰ {booking.startTime} - {booking.endTime}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Criado em:{" "}
+                            {new Date(booking.createdAt).toLocaleString("pt-BR")}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-foreground">
-                          📅 {formatDate(booking.date)}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          ⏰ {booking.startTime} - {booking.endTime}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Criado em:{" "}
-                          {new Date(booking.createdAt).toLocaleString("pt-BR")}
-                        </p>
+                      <div className="flex gap-2 ml-4">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openEditBookingModal(booking)}
+                          className="text-primary hover:text-primary/80 hover:bg-primary/10"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteBooking(booking.id)}
+                          className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
                   </Card>
@@ -251,6 +416,161 @@ export default function Admin() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Edit Room Modal */}
+      <Dialog open={editRoomModalOpen} onOpenChange={setEditRoomModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Sala</DialogTitle>
+            <DialogDescription>
+              Atualize as informações da sala
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="edit-room-name">Nome da Sala</Label>
+              <Input
+                id="edit-room-name"
+                value={editRoomName}
+                onChange={(e) => setEditRoomName(e.target.value)}
+                placeholder="Nome da sala"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-room-capacity">Capacidade</Label>
+              <Input
+                id="edit-room-capacity"
+                type="number"
+                value={editRoomCapacity}
+                onChange={(e) => setEditRoomCapacity(e.target.value)}
+                placeholder="Capacidade"
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setEditRoomModalOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={handleUpdateRoom}
+              disabled={isLoading}
+              className="bg-primary hover:bg-primary/90"
+            >
+              Atualizar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Booking Modal */}
+      <Dialog
+        open={editBookingModalOpen}
+        onOpenChange={setEditBookingModalOpen}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Agendamento</DialogTitle>
+            <DialogDescription>
+              Atualize os detalhes do agendamento
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="edit-booking-name">Nome do Cliente</Label>
+              <Input
+                id="edit-booking-name"
+                value={editBookingName}
+                onChange={(e) => setEditBookingName(e.target.value)}
+                placeholder="Nome do cliente"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-booking-email">Email</Label>
+              <Input
+                id="edit-booking-email"
+                type="email"
+                value={editBookingEmail}
+                onChange={(e) => setEditBookingEmail(e.target.value)}
+                placeholder="Email"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-booking-date">Data</Label>
+              <Input
+                id="edit-booking-date"
+                type="date"
+                value={editBookingDate}
+                onChange={(e) => setEditBookingDate(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label htmlFor="edit-booking-start">Hora Início</Label>
+                <Input
+                  id="edit-booking-start"
+                  type="time"
+                  value={editBookingStartTime}
+                  onChange={(e) => setEditBookingStartTime(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-booking-end">Hora Fim</Label>
+                <Input
+                  id="edit-booking-end"
+                  type="time"
+                  value={editBookingEndTime}
+                  onChange={(e) => setEditBookingEndTime(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="edit-booking-room">Sala</Label>
+              <select
+                id="edit-booking-room"
+                value={editBookingRoomId}
+                onChange={(e) => setEditBookingRoomId(e.target.value)}
+                className="w-full border rounded px-3 py-2 mt-1 bg-background border-border"
+              >
+                <option value="">Selecione uma sala</option>
+                {rooms.map((room) => (
+                  <option key={room.id} value={room.id}>
+                    {room.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setEditBookingModalOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={handleUpdateBooking}
+              disabled={isLoading}
+              className="bg-primary hover:bg-primary/90"
+            >
+              Atualizar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
