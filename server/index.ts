@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import { initializeDatabase } from "./db";
 import { handleDemo } from "./routes/demo";
 import {
   handleListRooms,
@@ -13,6 +14,16 @@ import {
   handleCreateBooking,
   handleGetAvailableTimes,
 } from "./routes/bookings";
+import { handleChat } from "./routes/chat";
+import {
+  handleAIListRooms,
+  handleAIListBookings,
+  handleAIGetBooking,
+  handleAICreateBooking,
+  handleAIUpdateBooking,
+  handleAICancelBooking,
+  handleAICheckAvailability,
+} from "./routes/ai";
 
 export function createServer() {
   const app = express();
@@ -32,6 +43,18 @@ export function createServer() {
   app.post("/api/bookings/check-availability", handleCheckAvailability);
   app.post("/api/bookings", handleCreateBooking);
   app.get("/api/bookings/available-times", handleGetAvailableTimes);
+
+  // Chat API (AI powered)
+  app.post("/api/chat", handleChat);
+
+  // AI Database Operations API
+  app.get("/api/ai/rooms", handleAIListRooms);
+  app.get("/api/ai/bookings", handleAIListBookings);
+  app.get("/api/ai/bookings/:id", handleAIGetBooking);
+  app.post("/api/ai/bookings", handleAICreateBooking);
+  app.post("/api/ai/bookings/check-availability", handleAICheckAvailability);
+  app.put("/api/ai/bookings/:id", handleAIUpdateBooking);
+  app.delete("/api/ai/bookings/:id", handleAICancelBooking);
 
   // Demo routes
   app.get("/api/ping", (_req, res) => {

@@ -32,6 +32,8 @@ export default defineConfig({
         // External dependencies that should not be bundled
         "express",
         "cors",
+        "mysql2",
+        "mysql2/promise",
       ],
       output: {
         format: "es",

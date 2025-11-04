@@ -23,7 +23,7 @@ export default function Header() {
             to="/"
             className={cn(
               "text-sm font-medium transition-colors hover:text-primary",
-              isActive("/") ? "text-primary" : "text-muted-foreground"
+              isActive("/") ? "text-primary" : "text-muted-foreground",
             )}
           >
             Chatbot
@@ -32,7 +32,7 @@ export default function Header() {
             to="/admin"
             className={cn(
               "text-sm font-medium transition-colors hover:text-primary flex items-center gap-2",
-              isActive("/admin") ? "text-primary" : "text-muted-foreground"
+              isActive("/admin") ? "text-primary" : "text-muted-foreground",
             )}
           >
             <Settings className="h-4 w-4" />
@@ -45,7 +45,7 @@ export default function Header() {
             to="/admin"
             className={cn(
               "inline-flex items-center gap-2 text-sm font-medium transition-colors hover:text-primary",
-              isActive("/admin") ? "text-primary" : "text-muted-foreground"
+              isActive("/admin") ? "text-primary" : "text-muted-foreground",
             )}
           >
             <Settings className="h-5 w-5" />

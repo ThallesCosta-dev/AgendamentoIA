@@ -19,6 +19,8 @@ export interface Booking {
   date: string; // ISO date string
   startTime: string; // HH:mm format
   endTime: string; // HH:mm format
+  duration?: string; // Duration in minutes or text (e.g., "90 minutos")
+  equipment?: string; // Extra equipment needed (e.g., "Projetor, Quadro branco")
   createdAt: string;
 }
 
@@ -34,6 +36,8 @@ export interface CreateBookingRequest {
   date: string;
   startTime: string;
   endTime: string;
+  duration?: string;
+  equipment?: string;
 }
 
 export interface ListRoomsResponse {

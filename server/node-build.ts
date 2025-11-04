@@ -1,5 +1,6 @@
 import path from "path";
 import { createServer } from "./index";
+import { initializeDatabase } from "./db";
 import * as express from "express";
 
 const app = createServer();
@@ -22,11 +23,24 @@ app.get("*", (req, res) => {
   res.sendFile(path.join(distPath, "index.html"));
 });
 
-app.listen(port, () => {
-  console.log(`🚀 Fusion Starter server running on port ${port}`);
-  console.log(`📱 Frontend: http://localhost:${port}`);
-  console.log(`🔧 API: http://localhost:${port}/api`);
-});
+async function startServer() {
+  try {
+    // Initialize database tables
+    await initializeDatabase();
+    console.log("✅ Database initialized");
+
+    app.listen(port, () => {
+      console.log(`🚀 Fusion Starter server running on port ${port}`);
+      console.log(`📱 Frontend: http://localhost:${port}`);
+      console.log(`🔧 API: http://localhost:${port}/api`);
+    });
+  } catch (error) {
+    console.error("❌ Failed to start server:", error);
+    process.exit(1);
+  }
+}
+
+startServer();
 
 // Graceful shutdown
 process.on("SIGTERM", () => {

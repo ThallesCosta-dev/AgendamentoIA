@@ -97,14 +97,16 @@ export default function Admin() {
   };
 
   const sortedBookings = [...bookings].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 p-4 md:p-8">
       <div className="max-w-6xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-2">Painel Administrativo</h1>
+          <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-2">
+            Painel Administrativo
+          </h1>
           <p className="text-muted-foreground">Gerencie salas e agendamentos</p>
         </div>
 
@@ -123,7 +125,9 @@ export default function Admin() {
           {/* Rooms Tab */}
           <TabsContent value="rooms" className="space-y-6">
             <Card className="p-6 border border-border">
-              <h2 className="text-xl font-semibold text-foreground mb-4">Criar Nova Sala</h2>
+              <h2 className="text-xl font-semibold text-foreground mb-4">
+                Criar Nova Sala
+              </h2>
               <form onSubmit={handleCreateRoom} className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <Input
@@ -154,7 +158,9 @@ export default function Admin() {
 
             {rooms.length === 0 ? (
               <Card className="p-8 text-center border border-border">
-                <p className="text-muted-foreground">Nenhuma sala cadastrada ainda.</p>
+                <p className="text-muted-foreground">
+                  Nenhuma sala cadastrada ainda.
+                </p>
               </Card>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -165,7 +171,9 @@ export default function Admin() {
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <h3 className="font-semibold text-foreground">{room.name}</h3>
+                        <h3 className="font-semibold text-foreground">
+                          {room.name}
+                        </h3>
                         <p className="text-sm text-muted-foreground mt-1">
                           Capacidade: {room.capacity} pessoas
                         </p>
@@ -189,15 +197,22 @@ export default function Admin() {
           <TabsContent value="bookings" className="space-y-6">
             {bookings.length === 0 ? (
               <Card className="p-8 text-center border border-border">
-                <p className="text-muted-foreground">Nenhum agendamento ainda.</p>
+                <p className="text-muted-foreground">
+                  Nenhum agendamento ainda.
+                </p>
               </Card>
             ) : (
               <div className="space-y-4">
                 {sortedBookings.map((booking) => (
-                  <Card key={booking.id} className="p-4 border border-border hover:border-primary/50 transition-colors">
+                  <Card
+                    key={booking.id}
+                    className="p-4 border border-border hover:border-primary/50 transition-colors"
+                  >
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <h3 className="font-semibold text-foreground">{booking.roomName}</h3>
+                        <h3 className="font-semibold text-foreground">
+                          {booking.roomName}
+                        </h3>
                         <p className="text-sm text-muted-foreground mt-1">
                           Agendado por: {booking.clientName}
                         </p>
@@ -213,7 +228,8 @@ export default function Admin() {
                           ⏰ {booking.startTime} - {booking.endTime}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          Criado em: {new Date(booking.createdAt).toLocaleString("pt-BR")}
+                          Criado em:{" "}
+                          {new Date(booking.createdAt).toLocaleString("pt-BR")}
                         </p>
                       </div>
                     </div>
