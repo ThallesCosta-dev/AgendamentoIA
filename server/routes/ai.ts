@@ -13,8 +13,8 @@ import { CreateBookingRequest, Room, Booking } from "@shared/api";
 import { sendBookingConfirmationEmail } from "../services/email";
 
 /**
- * AI endpoint: List all available rooms
- * Used by AI to check room inventory
+ * Endpoint de IA: Lista todas as salas disponíveis
+ * Usado pela IA para verificar o inventário de salas
  */
 export const handleAIListRooms: RequestHandler = async (_req, res) => {
   try {
@@ -34,8 +34,8 @@ export const handleAIListRooms: RequestHandler = async (_req, res) => {
 };
 
 /**
- * AI endpoint: List all bookings with optional filtering
- * Used by AI to check booking status
+ * Endpoint de IA: Lista todos os agendamentos com filtro opcional
+ * Usado pela IA para verificar o status dos agendamentos
  */
 export const handleAIListBookings: RequestHandler = async (req, res) => {
   try {
@@ -68,8 +68,8 @@ export const handleAIListBookings: RequestHandler = async (req, res) => {
 };
 
 /**
- * AI endpoint: Get a specific booking by ID
- * Used by AI to retrieve booking details for modification or cancellation
+ * Endpoint de IA: Obtém um agendamento específico por ID
+ * Usado pela IA para recuperar detalhes do agendamento para modificação ou cancelamento
  */
 export const handleAIGetBooking: RequestHandler = async (req, res) => {
   try {
@@ -106,15 +106,15 @@ export const handleAIGetBooking: RequestHandler = async (req, res) => {
 };
 
 /**
- * AI endpoint: Create a new booking
- * Used by AI to make reservations
+ * Endpoint de IA: Cria um novo agendamento
+ * Usado pela IA para fazer reservas
  */
 export const handleAICreateBooking: RequestHandler = async (req, res) => {
   try {
     const { roomId, clientName, clientEmail, date, startTime, endTime } =
       req.body as CreateBookingRequest;
 
-    // Validation
+    // Validação
     if (
       !roomId ||
       !clientName ||
@@ -130,7 +130,7 @@ export const handleAICreateBooking: RequestHandler = async (req, res) => {
       return;
     }
 
-    // Validate institutional email
+    // Valida email institucional
     if (!validateInstitutionalEmail(clientEmail)) {
       res.status(400).json({
         success: false,
@@ -140,7 +140,7 @@ export const handleAICreateBooking: RequestHandler = async (req, res) => {
       return;
     }
 
-    // Check if room exists
+    // Verifica se a sala existe
     const rooms = await getRooms();
     const room = rooms.find((r) => r.id === roomId);
     if (!room) {
@@ -151,7 +151,7 @@ export const handleAICreateBooking: RequestHandler = async (req, res) => {
       return;
     }
 
-    // Booking will be created by the main API, this is for AI
+    // O agendamento será criado pela API principal, isto é para IA
     const booking = await createBooking({
       roomId,
       roomName: room.name,
@@ -183,8 +183,8 @@ export const handleAICreateBooking: RequestHandler = async (req, res) => {
 };
 
 /**
- * AI endpoint: Update/modify an existing booking by ID
- * Used by AI to change booking details (date, time, room)
+ * Endpoint de IA: Atualiza/modifica um agendamento existente por ID
+ * Usado pela IA para alterar detalhes do agendamento (data, hora, sala)
  */
 export const handleAIUpdateBooking: RequestHandler = async (req, res) => {
   try {
@@ -200,7 +200,7 @@ export const handleAIUpdateBooking: RequestHandler = async (req, res) => {
       return;
     }
 
-    // Check if booking exists
+    // Verifica se o agendamento existe
     const existingBooking = await getBookingById(id);
     if (!existingBooking) {
       res.status(404).json({
@@ -210,7 +210,7 @@ export const handleAIUpdateBooking: RequestHandler = async (req, res) => {
       return;
     }
 
-    // Validate email if changed
+    // Valida email se foi alterado
     if (clientEmail && !validateInstitutionalEmail(clientEmail)) {
       res.status(400).json({
         success: false,
@@ -220,7 +220,7 @@ export const handleAIUpdateBooking: RequestHandler = async (req, res) => {
       return;
     }
 
-    // Check if room exists if changed
+    // Verifica se a sala existe se foi alterada
     let roomName = existingBooking.roomName;
     if (roomId) {
       const rooms = await getRooms();
@@ -260,8 +260,8 @@ export const handleAIUpdateBooking: RequestHandler = async (req, res) => {
 };
 
 /**
- * AI endpoint: Delete/cancel a booking by ID
- * Used by AI to cancel reservations
+ * Endpoint de IA: Deleta/cancela um agendamento por ID
+ * Usado pela IA para cancelar reservas
  */
 export const handleAICancelBooking: RequestHandler = async (req, res) => {
   try {
@@ -309,8 +309,8 @@ export const handleAICancelBooking: RequestHandler = async (req, res) => {
 };
 
 /**
- * AI endpoint: Check room availability
- * Used by AI to check if rooms are available for a given time slot
+ * Endpoint de IA: Verifica disponibilidade de salas
+ * Usado pela IA para verificar se as salas estão disponíveis para um intervalo de tempo específico
  */
 export const handleAICheckAvailability: RequestHandler = async (req, res) => {
   try {
@@ -327,7 +327,7 @@ export const handleAICheckAvailability: RequestHandler = async (req, res) => {
     const allRooms = await getRooms();
     const allBookings = await getBookings();
 
-    // Filter bookings for the requested date/time
+    // Filtra agendamentos para a data/hora solicitada
     const conflictingBookings = allBookings.filter((b) => {
       return b.date === date && b.startTime < endTime && b.endTime > startTime;
     });

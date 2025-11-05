@@ -7,44 +7,44 @@ import { Room, Booking } from "@shared/api";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-// Parse markdown-like formatting for bot messages
+// Analisa formatação do tipo markdown para mensagens do bot
 function parseMessageContent(content: string) {
   const parts: (string | JSX.Element)[] = [];
   let lastIndex = 0;
 
-  // Pattern to match: **bold**, *italic*, and line breaks
+  // Padrão para corresponder: **negrito**, *itálico*, e quebras de linha
   const pattern = /\*\*(.+?)\*\*|\*(.+?)\*|(?<!\*)(\\n|\n)(?!\*)/g;
   let match;
 
   while ((match = pattern.exec(content)) !== null) {
-    // Add text before this match
+    // Adiciona texto antes desta correspondência
     if (match.index > lastIndex) {
       parts.push(content.substring(lastIndex, match.index));
     }
 
     if (match[1]) {
-      // **bold** pattern
+      // Padrão **negrito**
       parts.push(
         <strong key={`${lastIndex}-bold`} className="font-bold">
           {match[1]}
         </strong>,
       );
     } else if (match[2]) {
-      // *italic* pattern
+      // Padrão *itálico*
       parts.push(
         <em key={`${lastIndex}-italic`} className="italic">
           {match[2]}
         </em>,
       );
     } else if (match[3]) {
-      // Line break pattern
+      // Padrão quebra de linha
       parts.push(<br key={`${lastIndex}-br`} />);
     }
 
     lastIndex = pattern.lastIndex;
   }
 
-  // Add remaining text
+  // Adiciona texto restante
   if (lastIndex < content.length) {
     parts.push(content.substring(lastIndex));
   }
@@ -79,7 +79,7 @@ export default function Chatbot() {
   const messageCounterRef = useRef(0);
   const initializedRef = useRef(false);
 
-  // Form data extracted from conversation
+  // Dados do formulário extraídos da conversa
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -102,12 +102,12 @@ export default function Chatbot() {
   const [modificationField, setModificationField] = useState<string>("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom
+  // Auto-scroll para o final
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Initialize with greeting
+  // Inicializa com saudação
   useEffect(() => {
     if (initializedRef.current) return;
     initializedRef.current = true;
@@ -131,7 +131,7 @@ export default function Chatbot() {
   }, []);
 
   const convertDateToISO = (dateStr: string): string => {
-    // If already in ISO format (YYYY-MM-DD), return as is
+    // Se j\u00e1 est\u00e1 no formato ISO (YYYY-MM-DD), return as is
     if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
       return dateStr;
     }
@@ -152,7 +152,7 @@ export default function Chatbot() {
   };
 
   const formatDateForDisplay = (dateStr: string): string => {
-    // Convert YYYY-MM-DD to DD/MM/YYYY for display
+    // Converte YYYY-MM-DD para DD/MM/YYYY para exibir
     if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
       const [year, month, day] = dateStr.split("-");
       return `${day}/${month}/${year}`;
@@ -163,20 +163,20 @@ export default function Chatbot() {
   const extractDataFromText = (text: string): ExtractedData => {
     const data: ExtractedData = {};
 
-    // Email pattern
+    // Padrão de email
     const emailMatch = text.match(/[\w\.-]+@[\w\.-]+\.\w+/);
     if (emailMatch) {
       data.email = emailMatch[0];
     }
 
-    // Name pattern - if starts with capital letter and is 2+ words
+    // Padrão de nome - se começar com letra maiúscula e tiver 2+ palavras
     const nameMatch = text.match(
       /(?:meu nome é|me chamo|sou) ([A-Z][a-záàâãéèêíïóôõöúçñ\s]+)/i,
     );
     if (nameMatch) {
       data.name = nameMatch[1].trim();
     } else if (!emailMatch) {
-      // Try to extract first 2-3 words if they look like a name
+      // Tenta extrair as primeiras 2-3 palavras se parecerem um nome
       const nameWords = text.match(
         /^([A-Z][a-záà��ãéèêíïóôõöúçñ]+(?:\s+[A-Z][a-záàâãéèêíïóôõöúçñ]+)?)/,
       );
@@ -185,7 +185,7 @@ export default function Chatbot() {
       }
     }
 
-    // Date pattern (YYYY-MM-DD, DD-MM-YYYY, DD/MM/YYYY, or Portuguese format like "15 de fevereiro")
+    // Padrão de data (YYYY-MM-DD, DD-MM-YYYY, DD/MM/YYYY, ou formato português como "15 de fevereiro")
     const isoDateMatch = text.match(/(\d{4}-\d{2}-\d{2})/);
     const dateDashMatch = text.match(/(\d{2}-\d{2}-\d{4})/);
     const dateSlashMatch = text.match(/(\d{2}\/\d{2}\/\d{4})/);
@@ -196,7 +196,7 @@ export default function Chatbot() {
     } else if (dateSlashMatch) {
       data.date = convertDateToISO(dateSlashMatch[1]);
     } else {
-      // Try Portuguese date format
+      // Tenta formato de data em português
       const ptDateMatch = text.match(
         /(\d{1,2})\s+de\s+(janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)/i,
       );
@@ -227,11 +227,11 @@ export default function Chatbot() {
     // Time pattern (HH:mm or just HH with h/horas)
     const validTimes = [];
 
-    // First try to match explicit time formats (HH:mm or HH h/horas)
+    // Primeiro tenta corresponder formatos de hora explícitos (HH:mm ou HH h/horas)
     const explicitTimeMatches = text.match(/(\d{1,2}):(\d{2})\s*(?:h|horas)?|(\d{1,2})\s*(?:h|horas)/g);
     if (explicitTimeMatches) {
       for (const timeStr of explicitTimeMatches) {
-        // Parse HH:mm format
+        // Analisa formato HH:mm
         const colonMatch = timeStr.match(/(\d{1,2}):(\d{2})/);
         if (colonMatch) {
           const hour = parseInt(colonMatch[1]);
@@ -241,7 +241,7 @@ export default function Chatbot() {
           continue;
         }
 
-        // Parse HH format (with h or horas)
+        // Analisa formato HH (com h ou horas)
         const hMatch = timeStr.match(/(\d{1,2})\s*(?:h|horas)/);
         if (hMatch) {
           const hour = parseInt(hMatch[1]);
@@ -252,8 +252,8 @@ export default function Chatbot() {
       }
     }
 
-    // If no explicit times found, try to match plain numbers (0-23) only if text is very short
-    // This helps capture "15" or "16" as times, but won't match date numbers in longer strings
+    // Se nenhuma hora explícita for encontrada, tenta corresponder números simples (0-23) apenas se o texto for muito curto
+    // Isso ajuda a capturar "15" ou "16" como horas, mas não corresponde números de data em strings mais longas
     if (validTimes.length === 0 && text.trim().length <= 3) {
       const plainNumberMatch = text.match(/^(\d{1,2})$/);
       if (plainNumberMatch) {
@@ -271,7 +271,7 @@ export default function Chatbot() {
       data.endTime = validTimes[1];
     }
 
-    // Duration pattern (numbers followed by minuto/min/h/hora)
+    // Padrão de duração (números seguidos por minuto/min/h/hora)
     const durationMatch = text.match(/(\d+)\s*(minuto|min|h|hora|horas)/i);
     if (durationMatch) {
       data.duration = durationMatch[0];
@@ -289,7 +289,7 @@ export default function Chatbot() {
   };
 
   const validateDate = (dateStr: string): boolean => {
-    // Validate YYYY-MM-DD format
+    // Valida formato YYYY-MM-DD
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
       return false;
     }
@@ -315,7 +315,7 @@ export default function Chatbot() {
   };
 
   const validateTime = (timeStr: string): boolean => {
-    // Validate HH:mm format (00:00 to 23:59)
+    // Valida formato HH:mm (00:00 a 23:59)
     if (!/^\d{2}:\d{2}$/.test(timeStr)) {
       return false;
     }
@@ -325,12 +325,12 @@ export default function Chatbot() {
   };
 
   const validateTimeRange = (startTime: string, endTime: string): boolean => {
-    // Both times must be valid format
+    // Ambas as horas devem estar em formato válido
     if (!validateTime(startTime) || !validateTime(endTime)) {
       return false;
     }
 
-    // End time must be after start time
+    // Hora final deve ser depois da hora inicial
     const [startHours, startMinutes] = startTime.split(":").map(Number);
     const [endHours, endMinutes] = endTime.split(":").map(Number);
 
@@ -709,7 +709,7 @@ export default function Chatbot() {
             fieldToUpdate,
           );
           addBotMessage(
-            `✅ Agendamento #${currentBookingId} modificado com sucesso!\n\n📋 Dados atualizados:\n📍 Sala: ${updatedBooking.roomName}\n�� Data: ${new Date(updatedBooking.date).toLocaleDateString("pt-BR")}\n�� Horário: ${updatedBooking.startTime} - ${updatedBooking.endTime}\n👤 Nome: ${updatedBooking.clientName}\n📧 Email: ${updatedBooking.clientEmail}`,
+            `✅ Agendamento #${currentBookingId} modificado com sucesso!\n\n📋 Dados atualizados:\n📍 Sala: ${updatedBooking.roomName}\n�� Data: ${new Date(updatedBooking.date).toLocaleDateString("pt-BR")}\n⏰ Horário: ${updatedBooking.startTime} - ${updatedBooking.endTime}\n👤 Nome: ${updatedBooking.clientName}\n📧 Email: ${updatedBooking.clientEmail}`,
           );
           setCurrentFlow("booking");
           setCurrentBookingId("");

@@ -26,12 +26,12 @@ export async function createRoom(
 export async function deleteRoom(roomId: string): Promise<boolean> {
   const connection = await getConnection();
   try {
-    // Delete bookings for this room first
+    // Delete agendamentos desta sala primeiro
     await connection.execute("DELETE FROM bookings WHERE room_id = ?", [
       roomId,
     ]);
 
-    // Then delete the room
+    // Depois deleta a sala
     const [result] = await connection.execute<ResultSetHeader>(
       "DELETE FROM rooms WHERE id = ?",
       [roomId],
@@ -98,7 +98,7 @@ export async function updateRoomById(
 ): Promise<Room> {
   const connection = await getConnection();
   try {
-    // Get the current room
+    // Obtém a sala atual
     const currentRoom = await getRoomById(id);
     if (!currentRoom) {
       throw new Error(`Room with ID ${id} not found`);
@@ -287,13 +287,13 @@ export async function updateBookingById(
 ): Promise<Booking> {
   const connection = await getConnection();
   try {
-    // Get the current booking
+    // Obtém o agendamento atual
     const currentBooking = await getBookingById(id);
     if (!currentBooking) {
       throw new Error(`Booking with ID ${id} not found`);
     }
 
-    // Build update query dynamically
+    // Constrói query de atualização dinamicamente
     const updateFields: string[] = [];
     const updateValues: any[] = [];
 
@@ -337,7 +337,7 @@ export async function updateBookingById(
       updateValues,
     );
 
-    // Return updated booking
+    // Retorna agendamento atualizado
     const updatedBooking = await getBookingById(id);
     if (!updatedBooking) {
       throw new Error("Failed to retrieve updated booking");
@@ -366,6 +366,6 @@ export async function deleteBookingById(id: string): Promise<boolean> {
 export function validateInstitutionalEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email)) return false;
-  // Accept any Brazilian educational institution email (.edu.br domain)
+  // Aceita qualquer email de instituição educacional brasileira (domínio .edu.br)
   return email.endsWith(".edu.br");
 }

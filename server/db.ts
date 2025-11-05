@@ -15,7 +15,7 @@ const pool = mysql.createPool({
 export async function initializeDatabase() {
   const connection = await pool.getConnection();
   try {
-    // Create rooms table if it doesn't exist
+    // Cria tabela de salas se não existir
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS rooms (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -25,7 +25,7 @@ export async function initializeDatabase() {
       )
     `);
 
-    // Create bookings table if it doesn't exist
+    // Cria tabela de agendamentos se não existir
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS bookings (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -43,13 +43,13 @@ export async function initializeDatabase() {
       )
     `);
 
-    // Check if default rooms exist
+    // Verifica se as salas padrão existem
     const [existingRooms] = await connection.execute<any[]>(
       "SELECT COUNT(*) as count FROM rooms",
     );
 
     if (existingRooms[0].count === 0) {
-      // Insert default rooms
+      // Insere salas padrão
       await connection.execute(
         "INSERT INTO rooms (name, capacity) VALUES (?, ?)",
         ["Sala 101", 30],

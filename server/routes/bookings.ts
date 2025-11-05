@@ -40,7 +40,7 @@ export const handleCheckAvailability: RequestHandler = async (req, res) => {
 
     const allRooms = await getRooms();
 
-    // Check availability for each room
+    // Verifica disponibilidade para cada sala
     const availableRooms = [];
     const bookedRoomIds = [];
 
@@ -65,14 +65,14 @@ export const handleCheckAvailability: RequestHandler = async (req, res) => {
 };
 
 const validateDate = (dateStr: string): boolean => {
-  // Internal storage uses YYYY-MM-DD format
+  // Armazenamento interno usa formato YYYY-MM-DD
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
     return false;
   }
 
   const [year, month, day] = dateStr.split("-").map(Number);
 
-  // Check if it's a valid calendar date
+  // Verifica se é uma data de calendário válida
   const selectedDate = new Date(year, month - 1, day);
   if (
     selectedDate.getFullYear() !== year ||
@@ -82,7 +82,7 @@ const validateDate = (dateStr: string): boolean => {
     return false;
   }
 
-  // Date must be today or in the future (no past dates)
+  // Data deve ser hoje ou no futuro (sem datas passadas)
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   selectedDate.setHours(0, 0, 0, 0);
@@ -91,7 +91,7 @@ const validateDate = (dateStr: string): boolean => {
 };
 
 const validateTime = (timeStr: string): boolean => {
-  // Validate HH:mm format (00:00 to 23:59)
+  // Valida formato HH:mm (00:00 a 23:59)
   if (!/^\d{2}:\d{2}$/.test(timeStr)) {
     return false;
   }
@@ -106,7 +106,7 @@ const validateTimeRange = (startTime: string, endTime: string): boolean => {
     return false;
   }
 
-  // End time must be after start time
+  // Hora final deve ser depois da hora inicial
   const [startHours, startMinutes] = startTime.split(":").map(Number);
   const [endHours, endMinutes] = endTime.split(":").map(Number);
 
@@ -121,7 +121,7 @@ export const handleCreateBooking: RequestHandler = async (req, res) => {
     const { roomId, clientName, clientEmail, date, startTime, endTime } =
       req.body as CreateBookingRequest;
 
-    // Validation
+    // Validação
     if (
       !roomId ||
       !clientName ||
@@ -134,7 +134,7 @@ export const handleCreateBooking: RequestHandler = async (req, res) => {
       return;
     }
 
-    // Validate date format and range
+    // Valida formato e intervalo da data
     if (!validateDate(date)) {
       res.status(400).json({
         error: "Data inválida. A data deve ser hoje ou no futuro (formato: DD-MM-YYYY)",
@@ -142,7 +142,7 @@ export const handleCreateBooking: RequestHandler = async (req, res) => {
       return;
     }
 
-    // Validate time format and range
+    // Valida formato e intervalo da hora
     if (!validateTime(startTime)) {
       res.status(400).json({ error: "Invalid start time format (use HH:mm)" });
       return;
@@ -160,7 +160,7 @@ export const handleCreateBooking: RequestHandler = async (req, res) => {
       return;
     }
 
-    // Validate institutional email
+    // Valida email institucional
     if (!validateInstitutionalEmail(clientEmail)) {
       res.status(400).json({
         error:
@@ -169,7 +169,7 @@ export const handleCreateBooking: RequestHandler = async (req, res) => {
       return;
     }
 
-    // Check if room exists
+    // Verifica se a sala existe
     const rooms = await getRooms();
     const room = rooms.find((r) => r.id === roomId);
     if (!room) {
@@ -177,7 +177,7 @@ export const handleCreateBooking: RequestHandler = async (req, res) => {
       return;
     }
 
-    // Check availability
+    // Verifica disponibilidade
     const isBooked = await bookingExists(roomId, date, startTime, endTime);
     if (isBooked) {
       res.status(409).json({
@@ -287,7 +287,7 @@ export const handleUpdateBooking: RequestHandler = async (req, res) => {
       return;
     }
 
-    // Validate time format and range
+    // Valida formato e intervalo da hora
     if (!validateTime(startTime)) {
       res.status(400).json({ error: "Invalid start time format (use HH:mm)" });
       return;
@@ -305,7 +305,7 @@ export const handleUpdateBooking: RequestHandler = async (req, res) => {
       return;
     }
 
-    // Validate institutional email
+    // Valida email institucional
     if (!validateInstitutionalEmail(clientEmail)) {
       res.status(400).json({
         error:
