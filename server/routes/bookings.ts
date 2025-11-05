@@ -16,6 +16,7 @@ import {
   updateBookingById,
   deleteBookingById,
 } from "../data";
+import { sendBookingConfirmationEmail } from "../services/email";
 
 export const handleListBookings: RequestHandler = async (_req, res) => {
   try {
@@ -194,6 +195,12 @@ export const handleCreateBooking: RequestHandler = async (req, res) => {
       startTime,
       endTime,
     });
+
+    try {
+      await sendBookingConfirmationEmail(booking);
+    } catch (emailError) {
+      console.error("Failed to send confirmation email:", emailError);
+    }
 
     const response: CreateBookingResponse = { booking };
     res.status(201).json(response);

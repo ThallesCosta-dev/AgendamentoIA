@@ -7,6 +7,51 @@ import { Room, Booking } from "@shared/api";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
+// Parse markdown-like formatting for bot messages
+function parseMessageContent(content: string) {
+  const parts: (string | JSX.Element)[] = [];
+  let lastIndex = 0;
+
+  // Pattern to match: **bold**, *italic*, and line breaks
+  const pattern = /\*\*(.+?)\*\*|\*(.+?)\*|(?<!\*)(\\n|\n)(?!\*)/g;
+  let match;
+
+  while ((match = pattern.exec(content)) !== null) {
+    // Add text before this match
+    if (match.index > lastIndex) {
+      parts.push(content.substring(lastIndex, match.index));
+    }
+
+    if (match[1]) {
+      // **bold** pattern
+      parts.push(
+        <strong key={`${lastIndex}-bold`} className="font-bold">
+          {match[1]}
+        </strong>,
+      );
+    } else if (match[2]) {
+      // *italic* pattern
+      parts.push(
+        <em key={`${lastIndex}-italic`} className="italic">
+          {match[2]}
+        </em>,
+      );
+    } else if (match[3]) {
+      // Line break pattern
+      parts.push(<br key={`${lastIndex}-br`} />);
+    }
+
+    lastIndex = pattern.lastIndex;
+  }
+
+  // Add remaining text
+  if (lastIndex < content.length) {
+    parts.push(content.substring(lastIndex));
+  }
+
+  return parts.length === 0 ? content : parts;
+}
+
 interface Message {
   id: string;
   type: "bot" | "user";
@@ -1051,7 +1096,9 @@ export default function Chatbot() {
                       : "bg-primary text-primary-foreground rounded-br-none",
                   )}
                 >
-                  {msg.content}
+                  {msg.type === "bot"
+                    ? parseMessageContent(msg.content)
+                    : msg.content}
                 </div>
               </div>
             ))

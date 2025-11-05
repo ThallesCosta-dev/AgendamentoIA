@@ -10,6 +10,7 @@ import {
   validateInstitutionalEmail,
 } from "../data";
 import { CreateBookingRequest, Room, Booking } from "@shared/api";
+import { sendBookingConfirmationEmail } from "../services/email";
 
 /**
  * AI endpoint: List all available rooms
@@ -160,6 +161,12 @@ export const handleAICreateBooking: RequestHandler = async (req, res) => {
       startTime,
       endTime,
     });
+
+    try {
+      await sendBookingConfirmationEmail(booking);
+    } catch (emailError) {
+      console.error("Failed to send confirmation email:", emailError);
+    }
 
     res.status(201).json({
       success: true,
