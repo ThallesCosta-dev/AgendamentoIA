@@ -90,10 +90,6 @@ export default function Login() {
               {isLoading ? "Entrando..." : "Entrar"}
             </Button>
           </form>
-
-          <p className="text-xs text-muted-foreground text-center mt-6">
-            Credenciais de teste: admin / admin
-          </p>
         </div>
       </Card>
     </div>
