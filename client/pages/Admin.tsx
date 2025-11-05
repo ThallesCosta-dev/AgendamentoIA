@@ -168,6 +168,58 @@ export default function Admin() {
     setEditBookingModalOpen(true);
   };
 
+  const validateDate = (dateStr: string): boolean => {
+    // Validate YYYY-MM-DD format
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return false;
+    }
+
+    const [year, month, day] = dateStr.split("-").map(Number);
+
+    // Check if it's a valid calendar date
+    const selectedDate = new Date(year, month - 1, day);
+    if (
+      selectedDate.getFullYear() !== year ||
+      selectedDate.getMonth() !== month - 1 ||
+      selectedDate.getDate() !== day
+    ) {
+      return false;
+    }
+
+    // Date must be today or in the future (no past dates)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    selectedDate.setHours(0, 0, 0, 0);
+
+    return selectedDate >= today;
+  };
+
+  const validateTime = (timeStr: string): boolean => {
+    // Validate HH:mm format (00:00 to 23:59)
+    if (!/^\d{2}:\d{2}$/.test(timeStr)) {
+      return false;
+    }
+
+    const [hours, minutes] = timeStr.split(":").map(Number);
+    return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
+  };
+
+  const validateTimeRange = (startTime: string, endTime: string): boolean => {
+    // Both times must be valid format
+    if (!validateTime(startTime) || !validateTime(endTime)) {
+      return false;
+    }
+
+    // End time must be after start time
+    const [startHours, startMinutes] = startTime.split(":").map(Number);
+    const [endHours, endMinutes] = endTime.split(":").map(Number);
+
+    const startTotalMinutes = startHours * 60 + startMinutes;
+    const endTotalMinutes = endHours * 60 + endMinutes;
+
+    return endTotalMinutes > startTotalMinutes;
+  };
+
   const handleUpdateBooking = async () => {
     if (
       !editingBooking ||
@@ -178,6 +230,29 @@ export default function Admin() {
       !editBookingEndTime
     ) {
       toast.error("Preencha todos os campos");
+      return;
+    }
+
+    // Validate date
+    if (!validateDate(editBookingDate)) {
+      toast.error("Data inválida. A data deve ser hoje ou no futuro (formato: YYYY-MM-DD)");
+      return;
+    }
+
+    // Validate time format
+    if (!validateTime(editBookingStartTime)) {
+      toast.error("Formato de horário de início inválido (use HH:mm)");
+      return;
+    }
+
+    if (!validateTime(editBookingEndTime)) {
+      toast.error("Formato de horário de término inválido (use HH:mm)");
+      return;
+    }
+
+    // Validate time range
+    if (!validateTimeRange(editBookingStartTime, editBookingEndTime)) {
+      toast.error("Horário de término deve ser após o horário de início");
       return;
     }
 

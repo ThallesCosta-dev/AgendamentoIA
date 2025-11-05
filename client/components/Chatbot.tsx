@@ -91,12 +91,27 @@ export default function Chatbot() {
       return dateStr;
     }
 
-    // Convert DD/MM/YYYY to YYYY-MM-DD
+    // Convert DD-MM-YYYY to YYYY-MM-DD
+    if (/^\d{2}-\d{2}-\d{4}$/.test(dateStr)) {
+      const [day, month, year] = dateStr.split("-");
+      return `${year}-${month}-${day}`;
+    }
+
+    // Convert DD/MM/YYYY to YYYY-MM-DD (legacy support)
     if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
       const [day, month, year] = dateStr.split("/");
       return `${year}-${month}-${day}`;
     }
 
+    return dateStr;
+  };
+
+  const formatDateForDisplay = (dateStr: string): string => {
+    // Convert YYYY-MM-DD to DD/MM/YYYY for display
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      const [year, month, day] = dateStr.split("-");
+      return `${day}/${month}/${year}`;
+    }
     return dateStr;
   };
 
@@ -118,18 +133,21 @@ export default function Chatbot() {
     } else if (!emailMatch) {
       // Try to extract first 2-3 words if they look like a name
       const nameWords = text.match(
-        /^([A-Z][a-záàâãéèêíïóôõöúçñ]+(?:\s+[A-Z][a-záàâãéèêíïóôõöúçñ]+)?)/,
+        /^([A-Z][a-záà��ãéèêíïóôõöúçñ]+(?:\s+[A-Z][a-záàâãéèêíïóôõöúçñ]+)?)/,
       );
       if (nameWords && !text.toLowerCase().includes("agendar")) {
         data.name = nameWords[1];
       }
     }
 
-    // Date pattern (YYYY-MM-DD, DD/MM/YYYY, or Portuguese format like "15 de fevereiro")
+    // Date pattern (YYYY-MM-DD, DD-MM-YYYY, DD/MM/YYYY, or Portuguese format like "15 de fevereiro")
     const isoDateMatch = text.match(/(\d{4}-\d{2}-\d{2})/);
+    const dateDashMatch = text.match(/(\d{2}-\d{2}-\d{4})/);
     const dateSlashMatch = text.match(/(\d{2}\/\d{2}\/\d{4})/);
     if (isoDateMatch) {
       data.date = isoDateMatch[1];
+    } else if (dateDashMatch) {
+      data.date = convertDateToISO(dateDashMatch[1]);
     } else if (dateSlashMatch) {
       data.date = convertDateToISO(dateSlashMatch[1]);
     } else {
@@ -223,6 +241,58 @@ export default function Chatbot() {
     if (!emailRegex.test(email)) return false;
     // Accept any Brazilian educational institution email (.edu.br domain)
     return email.endsWith(".edu.br");
+  };
+
+  const validateDate = (dateStr: string): boolean => {
+    // Validate YYYY-MM-DD format
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return false;
+    }
+
+    const [year, month, day] = dateStr.split("-").map(Number);
+
+    // Check if it's a valid calendar date
+    const selectedDate = new Date(year, month - 1, day);
+    if (
+      selectedDate.getFullYear() !== year ||
+      selectedDate.getMonth() !== month - 1 ||
+      selectedDate.getDate() !== day
+    ) {
+      return false;
+    }
+
+    // Date must be today or in the future (no past dates)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    selectedDate.setHours(0, 0, 0, 0);
+
+    return selectedDate >= today;
+  };
+
+  const validateTime = (timeStr: string): boolean => {
+    // Validate HH:mm format (00:00 to 23:59)
+    if (!/^\d{2}:\d{2}$/.test(timeStr)) {
+      return false;
+    }
+
+    const [hours, minutes] = timeStr.split(":").map(Number);
+    return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
+  };
+
+  const validateTimeRange = (startTime: string, endTime: string): boolean => {
+    // Both times must be valid format
+    if (!validateTime(startTime) || !validateTime(endTime)) {
+      return false;
+    }
+
+    // End time must be after start time
+    const [startHours, startMinutes] = startTime.split(":").map(Number);
+    const [endHours, endMinutes] = endTime.split(":").map(Number);
+
+    const startTotalMinutes = startHours * 60 + startMinutes;
+    const endTotalMinutes = endHours * 60 + endMinutes;
+
+    return endTotalMinutes > startTotalMinutes;
   };
 
   const checkAvailability = async (
@@ -611,6 +681,34 @@ export default function Chatbot() {
 
       // Build updated form data FIRST
       const extractedDate = extractedData.date ? convertDateToISO(extractedData.date) : formData.date;
+
+      // Validate date if provided
+      if (extractedData.date && !validateDate(extractedDate)) {
+        addBotMessage(
+          "❌ A data deve ser hoje ou no futuro. Por favor, use o formato DD-MM-YYYY (ex: 25-12-2025).",
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      // Validate start time if provided
+      if (extractedData.startTime && !validateTime(extractedData.startTime)) {
+        addBotMessage(
+          "❌ Horário de início inválido. Use o formato HH:mm (ex: 14:30).",
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      // Validate end time if provided
+      if (extractedData.endTime && !validateTime(extractedData.endTime)) {
+        addBotMessage(
+          "❌ Horário de término inválido. Use o formato HH:mm (ex: 15:30).",
+        );
+        setIsLoading(false);
+        return;
+      }
+
       const updatedFormData = {
         ...formData,
         name: extractedData.name || formData.name,
@@ -640,9 +738,28 @@ export default function Chatbot() {
 
       // FIRST: Check if user is trying to select a room (before checking availability)
       if (availableRooms.length > 0 && !updatedFormData.selectedRoomId) {
+        // Check if user mentioned any room name
+        const mentionedRoomName = userInput.toLowerCase();
         const roomSelection = availableRooms.find((r) =>
-          userInput.toLowerCase().includes(r.name.toLowerCase()),
+          mentionedRoomName.includes(r.name.toLowerCase()),
         );
+
+        // If user tried to select a room but it's not in available rooms list, show error
+        if (!roomSelection && mentionedRoomName.includes("sala")) {
+          addBotMessage(
+            `❌ A sala mencionada não está disponível para este horário. Por favor, escolha uma das salas listadas acima.`,
+          );
+          setConversationHistory((prev) => [
+            ...prev,
+            { role: "user" as const, content: userInput },
+            {
+              role: "assistant",
+              content: `❌ A sala mencionada não está disponível para este horário. Por favor, escolha uma das salas listadas acima.`,
+            },
+          ]);
+          setIsLoading(false);
+          return;
+        }
 
         if (roomSelection) {
           console.log("Room selected:", roomSelection.name);
@@ -653,7 +770,7 @@ export default function Chatbot() {
 
           setFormData(updatedDataWithRoom);
 
-          const confirmMessage = `Você selecionou a sala "${roomSelection.name}".\n\n📋 Resumo:\n👤 ${updatedDataWithRoom.name}\n📧 ${updatedDataWithRoom.email}\n📅 ${updatedDataWithRoom.date}\n⏰ ${updatedDataWithRoom.startTime} - ${updatedDataWithRoom.endTime}\n📍 ${roomSelection.name}\n\nDeseja confirmar este agendamento?`;
+          const confirmMessage = `Você selecionou a sala "${roomSelection.name}".\n\n📋 Resumo:\n👤 ${updatedDataWithRoom.name}\n📧 ${updatedDataWithRoom.email}\n📅 ${formatDateForDisplay(updatedDataWithRoom.date)}\n⏰ ${updatedDataWithRoom.startTime} - ${updatedDataWithRoom.endTime}\n📍 ${roomSelection.name}\n\nDeseja confirmar este agendamento?`;
           addBotMessage(confirmMessage);
           setConversationHistory((prev) => [
             ...prev,
@@ -861,7 +978,9 @@ export default function Chatbot() {
         const errorData = await response
           .json()
           .catch(() => ({ error: "Unknown error" }));
-        throw new Error(errorData.error || "Failed to get AI response");
+        const errorMsg = errorData.error || "Failed to get AI response";
+        console.error("Chat API error:", errorMsg);
+        throw new Error(errorMsg);
       }
 
       const data = await response.json();

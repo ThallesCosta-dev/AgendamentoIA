@@ -42,8 +42,6 @@ VOCÊ DEVE FOCAR EM:
 4. Esclarecer dúvidas do usuário
 5. Guiar o usuário naturalmente no processo
 
-⚠️ REGRA CRÍTICA - NÃO SUGIRA HORÁRIOS PADRÃO:
-- NUNCA sugira 11:00, 12:00, 13:00, 14:00, 15:00, 20:00 ou qualquer outro horário padrão
 - SEMPRE aguarde que o USUÁRIO forneça os horários
 - Peça explicitamente: "Qual é o horário de INÍCIO que você deseja?"
 - Peça explicitamente: "Qual é o horário de TÉRMINO?"
@@ -112,7 +110,7 @@ export const handleChat: RequestHandler = async (req, res) => {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
-          "HTTP-Referer": "http://localhost:5173",
+          "HTTP-Referer": "https://openrouter.ai",
           "X-Title": "SalaAgenda Chatbot",
           "Content-Type": "application/json",
         },
@@ -131,17 +129,22 @@ export const handleChat: RequestHandler = async (req, res) => {
       console.error("OpenRouter API error:", response.status, errorText);
 
       let errorMessage = `OpenRouter API error: ${response.statusText}`;
+      let details = "";
       try {
         const errorJson = JSON.parse(errorText);
         if (errorJson.error?.message) {
           errorMessage = errorJson.error.message;
         }
+        if (errorJson.error?.code === 401) {
+          details = " - Chave da API inválida ou expirada. Verifique a chave no OpenRouter.";
+        }
       } catch (e) {
         // Keep the default error message
       }
 
+      console.error(`Full error details: ${errorMessage}${details}`);
       res.status(response.status).json({
-        error: errorMessage,
+        error: errorMessage + details,
       });
       return;
     }

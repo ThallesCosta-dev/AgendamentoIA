@@ -157,7 +157,8 @@ export async function getBookings(): Promise<Booking[]> {
   try {
     const [rows] = await connection.execute<RowDataPacket[]>(
       `SELECT id, room_id as roomId, room_name as roomName, client_name as clientName,
-              client_email as clientEmail, date, start_time as startTime, end_time as endTime,
+              client_email as clientEmail, DATE_FORMAT(date, '%Y-%m-%d') as date,
+              start_time as startTime, end_time as endTime,
               created_at
        FROM bookings ORDER BY date DESC, start_time DESC`,
     );
@@ -186,7 +187,8 @@ export async function getBookingsByRoom(roomId: string): Promise<Booking[]> {
   try {
     const [rows] = await connection.execute<RowDataPacket[]>(
       `SELECT id, room_id as roomId, room_name as roomName, client_name as clientName,
-              client_email as clientEmail, date, start_time as startTime, end_time as endTime,
+              client_email as clientEmail, DATE_FORMAT(date, '%Y-%m-%d') as date,
+              start_time as startTime, end_time as endTime,
               created_at
        FROM bookings WHERE room_id = ? ORDER BY date ASC, start_time ASC`,
       [roomId],
@@ -242,7 +244,8 @@ export async function getBookingById(id: string): Promise<Booking | null> {
   try {
     const [rows] = await connection.execute<RowDataPacket[]>(
       `SELECT id, room_id as roomId, room_name as roomName, client_name as clientName,
-              client_email as clientEmail, date, start_time as startTime, end_time as endTime,
+              client_email as clientEmail, DATE_FORMAT(date, '%Y-%m-%d') as date,
+              start_time as startTime, end_time as endTime,
               created_at
        FROM bookings WHERE id = ?`,
       [id],
