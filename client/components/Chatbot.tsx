@@ -653,10 +653,41 @@ export default function Chatbot() {
             }
             fieldToUpdate.clientEmail = newValue;
           } else if (modificationField === "date") {
-            fieldToUpdate.date = newValue;
+            const convertedDate = convertDateToISO(newValue);
+            if (!validateDate(convertedDate)) {
+              addBotMessage(
+                "❌ Data inválida. A data deve ser hoje ou no futuro (formato: DD/MM/YYYY ou YYYY-MM-DD)",
+              );
+              setIsLoading(false);
+              return;
+            }
+            fieldToUpdate.date = convertedDate;
           } else if (modificationField === "startTime") {
+            if (!validateTime(newValue)) {
+              addBotMessage(
+                "❌ Hora inválida. Use o formato HH:mm (exemplo: 14:30)",
+              );
+              setIsLoading(false);
+              return;
+            }
             fieldToUpdate.startTime = newValue;
           } else if (modificationField === "endTime") {
+            if (!validateTime(newValue)) {
+              addBotMessage(
+                "❌ Hora inválida. Use o formato HH:mm (exemplo: 15:30)",
+              );
+              setIsLoading(false);
+              return;
+            }
+            // Validate time range with the current start time
+            const startTimeToUse = fieldToUpdate.startTime || currentBooking.startTime;
+            if (!validateTimeRange(startTimeToUse, newValue)) {
+              addBotMessage(
+                "❌ Hora final inválida. A hora final deve ser depois da hora inicial",
+              );
+              setIsLoading(false);
+              return;
+            }
             fieldToUpdate.endTime = newValue;
           } else if (modificationField === "roomId") {
             const selectedRoom = availableRooms.find((r) =>
@@ -678,7 +709,7 @@ export default function Chatbot() {
             fieldToUpdate,
           );
           addBotMessage(
-            `✅ Agendamento #${currentBookingId} modificado com sucesso!\n\n📋 Dados atualizados:\n📍 Sala: ${updatedBooking.roomName}\n�� Data: ${new Date(updatedBooking.date).toLocaleDateString("pt-BR")}\n⏰ Horário: ${updatedBooking.startTime} - ${updatedBooking.endTime}\n👤 Nome: ${updatedBooking.clientName}\n📧 Email: ${updatedBooking.clientEmail}`,
+            `✅ Agendamento #${currentBookingId} modificado com sucesso!\n\n📋 Dados atualizados:\n📍 Sala: ${updatedBooking.roomName}\n�� Data: ${new Date(updatedBooking.date).toLocaleDateString("pt-BR")}\n�� Horário: ${updatedBooking.startTime} - ${updatedBooking.endTime}\n👤 Nome: ${updatedBooking.clientName}\n📧 Email: ${updatedBooking.clientEmail}`,
           );
           setCurrentFlow("booking");
           setCurrentBookingId("");
