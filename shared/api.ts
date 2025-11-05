@@ -1,6 +1,6 @@
 /**
- * Shared code between client and server
- * Useful to share types between client and server
+ * Código compartilhado entre cliente e servidor
+ * Útil para compartilhar tipos entre cliente e servidor
  */
 
 export interface Room {

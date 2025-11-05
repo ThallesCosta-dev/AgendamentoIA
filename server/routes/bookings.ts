@@ -223,7 +223,7 @@ export const handleGetAvailableTimes: RequestHandler = async (req, res) => {
     const allBookings = await getBookings();
     const bookings = allBookings.filter((b) => b.date === date);
 
-    // Get all bookings for this date
+    // Obter todos os agendamentos para esta data
     const bookedSlots: {
       [roomId: string]: Array<{ start: number; end: number }>;
     } = {};
@@ -279,7 +279,7 @@ export const handleUpdateBooking: RequestHandler = async (req, res) => {
       return;
     }
 
-    // Validate date format and range
+    // Validar formato e intervalo da data
     if (!validateDate(date)) {
       res.status(400).json({
         error: "Data inválida. A data deve ser hoje ou no futuro (formato: DD-MM-YYYY)",

@@ -35,7 +35,7 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            {/* ADICIONE TODAS AS ROTAS PERSONALIZADAS ACIMA DA ROTA DE CAPTURA "*" */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

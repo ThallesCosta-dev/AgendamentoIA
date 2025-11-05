@@ -11,7 +11,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // Check if user was previously logged in
+  // Verifica se o usuário estava anteriormente conectado
   useEffect(() => {
     const savedAuth = localStorage.getItem("adminAuth");
     if (savedAuth === "true") {

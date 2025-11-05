@@ -23,13 +23,13 @@ export default function Admin() {
   const [newRoomCapacity, setNewRoomCapacity] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  // Edit room modal state
+  // Estado modal de edição de sala
   const [editRoomModalOpen, setEditRoomModalOpen] = useState(false);
   const [editingRoom, setEditingRoom] = useState<Room | null>(null);
   const [editRoomName, setEditRoomName] = useState("");
   const [editRoomCapacity, setEditRoomCapacity] = useState("");
 
-  // Edit booking modal state
+  // Estado modal de edição de agendamento
   const [editBookingModalOpen, setEditBookingModalOpen] = useState(false);
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [editBookingName, setEditBookingName] = useState("");
@@ -169,14 +169,14 @@ export default function Admin() {
   };
 
   const validateDate = (dateStr: string): boolean => {
-    // Validate YYYY-MM-DD format
+    // Validar formato YYYY-MM-DD
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
       return false;
     }
 
     const [year, month, day] = dateStr.split("-").map(Number);
 
-    // Check if it's a valid calendar date
+    // Verificar se é uma data de calendário válida
     const selectedDate = new Date(year, month - 1, day);
     if (
       selectedDate.getFullYear() !== year ||
@@ -186,7 +186,7 @@ export default function Admin() {
       return false;
     }
 
-    // Date must be today or in the future (no past dates)
+    // Data deve ser hoje ou no futuro (sem datas passadas)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     selectedDate.setHours(0, 0, 0, 0);
@@ -195,7 +195,7 @@ export default function Admin() {
   };
 
   const validateTime = (timeStr: string): boolean => {
-    // Validate HH:mm format (00:00 to 23:59)
+    // Validar formato HH:mm (00:00 a 23:59)
     if (!/^\d{2}:\d{2}$/.test(timeStr)) {
       return false;
     }
@@ -205,12 +205,12 @@ export default function Admin() {
   };
 
   const validateTimeRange = (startTime: string, endTime: string): boolean => {
-    // Both times must be valid format
+    // Ambas as horas devem estar em formato válido
     if (!validateTime(startTime) || !validateTime(endTime)) {
       return false;
     }
 
-    // End time must be after start time
+    // Hora final deve ser depois da hora inicial
     const [startHours, startMinutes] = startTime.split(":").map(Number);
     const [endHours, endMinutes] = endTime.split(":").map(Number);
 
@@ -233,13 +233,13 @@ export default function Admin() {
       return;
     }
 
-    // Validate date
+    // Validar data
     if (!validateDate(editBookingDate)) {
       toast.error("Data inválida. A data deve ser hoje ou no futuro (formato: YYYY-MM-DD)");
       return;
     }
 
-    // Validate time format
+    // Validar formato de hora
     if (!validateTime(editBookingStartTime)) {
       toast.error("Formato de horário de início inválido (use HH:mm)");
       return;
@@ -250,7 +250,7 @@ export default function Admin() {
       return;
     }
 
-    // Validate time range
+    // Validar intervalo de hora
     if (!validateTimeRange(editBookingStartTime, editBookingEndTime)) {
       toast.error("Horário de término deve ser após o horário de início");
       return;
@@ -305,13 +305,13 @@ export default function Admin() {
   };
 
   const formatDate = (dateString: string) => {
-    // Handle YYYY-MM-DD format without timezone conversion issues
+    // Lidar com formato YYYY-MM-DD sem problemas de conversão de fuso horário
     if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
       const [year, month, day] = dateString.split("-");
       return `${day}/${month}/${year}`;
     }
 
-    // Fallback for other formats
+    // Fallback para outros formatos
     return new Date(dateString).toLocaleDateString("pt-BR");
   };
 

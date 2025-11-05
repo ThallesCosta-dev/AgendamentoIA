@@ -1,4 +1,4 @@
-/** @import must precede all other statements */
+/** @import deve vir antes de todas as outras declarações */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
 
 @tailwind base;
@@ -7,8 +7,8 @@
 
 @layer base {
   /**
-   * Tailwind CSS theme - Modern institutional blue/purple color scheme
-   * tailwind.config.ts expects the following color variables to be expressed as HSL values.
+   * Tema Tailwind CSS - Esquema de cores institucional azul/roxo moderno
+   * tailwind.config.ts espera que as seguintes variáveis de cor sejam expressas em valores HSL.
   */
   :root {
     --background: 0 0% 100%;
@@ -116,7 +116,7 @@
     white-space: pre;
   }
 
-  /* Scrollbar styling */
+  /* Estilo da barra de rolagem */
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;

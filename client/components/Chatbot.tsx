@@ -152,7 +152,7 @@ export default function Chatbot() {
   };
 
   const formatDateForDisplay = (dateStr: string): string => {
-    // Converte YYYY-MM-DD para DD/MM/YYYY para exibir
+    // Converter YYYY-MM-DD para DD/MM/YYYY para exibição
     if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
       const [year, month, day] = dateStr.split("-");
       return `${day}/${month}/${year}`;
@@ -196,7 +196,7 @@ export default function Chatbot() {
     } else if (dateSlashMatch) {
       data.date = convertDateToISO(dateSlashMatch[1]);
     } else {
-      // Tenta formato de data em português
+      // Tentar formato de data em português
       const ptDateMatch = text.match(
         /(\d{1,2})\s+de\s+(janeiro|fevereiro|março|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)/i,
       );
@@ -224,14 +224,14 @@ export default function Chatbot() {
       }
     }
 
-    // Time pattern (HH:mm or just HH with h/horas)
+    // Padrão de hora (HH:mm ou apenas HH com h/horas)
     const validTimes = [];
 
     // Primeiro tenta corresponder formatos de hora explícitos (HH:mm ou HH h/horas)
     const explicitTimeMatches = text.match(/(\d{1,2}):(\d{2})\s*(?:h|horas)?|(\d{1,2})\s*(?:h|horas)/g);
     if (explicitTimeMatches) {
       for (const timeStr of explicitTimeMatches) {
-        // Analisa formato HH:mm
+        // Analisar formato HH:mm
         const colonMatch = timeStr.match(/(\d{1,2}):(\d{2})/);
         if (colonMatch) {
           const hour = parseInt(colonMatch[1]);
@@ -241,7 +241,7 @@ export default function Chatbot() {
           continue;
         }
 
-        // Analisa formato HH (com h ou horas)
+        // Analisar formato HH (com h ou horas)
         const hMatch = timeStr.match(/(\d{1,2})\s*(?:h|horas)/);
         if (hMatch) {
           const hour = parseInt(hMatch[1]);
@@ -252,7 +252,7 @@ export default function Chatbot() {
       }
     }
 
-    // Se nenhuma hora explícita for encontrada, tenta corresponder números simples (0-23) apenas se o texto for muito curto
+    // Se nenhuma hora explícita for encontrada, tentar corresponder números simples (0-23) apenas se o texto for muito curto
     // Isso ajuda a capturar "15" ou "16" como horas, mas não corresponde números de data em strings mais longas
     if (validTimes.length === 0 && text.trim().length <= 3) {
       const plainNumberMatch = text.match(/^(\d{1,2})$/);
@@ -284,19 +284,19 @@ export default function Chatbot() {
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) return false;
-    // Accept any Brazilian educational institution email (.edu.br domain)
+    // Aceitar qualquer email de instituição educacional brasileira (domínio .edu.br)
     return email.endsWith(".edu.br");
   };
 
   const validateDate = (dateStr: string): boolean => {
-    // Valida formato YYYY-MM-DD
+    // Validar formato YYYY-MM-DD
     if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
       return false;
     }
 
     const [year, month, day] = dateStr.split("-").map(Number);
 
-    // Check if it's a valid calendar date
+    // Verificar se é uma data de calendário válida
     const selectedDate = new Date(year, month - 1, day);
     if (
       selectedDate.getFullYear() !== year ||
@@ -306,7 +306,7 @@ export default function Chatbot() {
       return false;
     }
 
-    // Date must be today or in the future (no past dates)
+    // Data deve ser hoje ou no futuro (sem datas passadas)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     selectedDate.setHours(0, 0, 0, 0);
@@ -315,7 +315,7 @@ export default function Chatbot() {
   };
 
   const validateTime = (timeStr: string): boolean => {
-    // Valida formato HH:mm (00:00 a 23:59)
+    // Validar formato HH:mm (00:00 a 23:59)
     if (!/^\d{2}:\d{2}$/.test(timeStr)) {
       return false;
     }
@@ -457,7 +457,7 @@ export default function Chatbot() {
     setIsLoading(true);
 
     try {
-      // Check if user wants to modify or cancel booking
+      // Verificar se o usuário quer modificar ou cancelar o agendamento
       const lowerInput = userInput.toLowerCase();
       const wantsModify =
         lowerInput.includes("modificar") ||
@@ -487,7 +487,7 @@ export default function Chatbot() {
         return;
       }
 
-      // Extract booking ID if in modify/cancel flow
+      // Extrair ID do agendamento se estiver no fluxo de modificação/cancelamento
       if (
         (currentFlow === "modify" || currentFlow === "cancel") &&
         !currentBookingId
@@ -534,7 +534,7 @@ export default function Chatbot() {
         }
       }
 
-      // Handle cancel confirmation
+      // Lidar com confirmação de cancelamento
       if (currentFlow === "cancel" && currentBookingId && currentBooking) {
         if (
           lowerInput.includes("sim") ||
@@ -566,7 +566,7 @@ export default function Chatbot() {
         }
       }
 
-      // Handle modification field selection
+      // Lidar com seleção de campo de modificação
       if (
         currentFlow === "modify" &&
         currentBookingId &&
@@ -630,7 +630,7 @@ export default function Chatbot() {
         }
       }
 
-      // Handle modification value input
+      // Lidar com entrada de valor de modificação
       if (
         currentFlow === "modify" &&
         currentBookingId &&
@@ -679,7 +679,7 @@ export default function Chatbot() {
               setIsLoading(false);
               return;
             }
-            // Validate time range with the current start time
+            // Validar intervalo de hora com a hora inicial atual
             const startTimeToUse = fieldToUpdate.startTime || currentBooking.startTime;
             if (!validateTimeRange(startTimeToUse, newValue)) {
               addBotMessage(
@@ -727,17 +727,17 @@ export default function Chatbot() {
         }
       }
 
-      // Regular booking flow - send message to AI
-      // Don't extract name if we're in room selection phase (to avoid capturing room names)
+      // Fluxo de agendamento regular - enviar mensagem para IA
+      // Não extrair nome se estivermos na fase de seleção de sala (para evitar capturar nomes de salas)
       const shouldExtractName = availableRooms.length === 0;
       const extractedData = extractDataFromText(userInput);
 
-      // If we're selecting a room, don't override the name
+      // Se estivermos selecionando uma sala, não sobrescrever o nome
       if (!shouldExtractName && extractedData.name) {
         extractedData.name = undefined;
       }
 
-      // If we already have a startTime and a new time is extracted, use it as endTime
+      // Se já temos uma hora inicial e uma nova hora é extraída, usar como hora final
       if (formData.startTime && !formData.endTime && extractedData.startTime) {
         extractedData.endTime = extractedData.startTime;
         extractedData.startTime = undefined;
@@ -746,7 +746,7 @@ export default function Chatbot() {
       console.log("Extracted data:", extractedData);
       console.log("Current formData:", formData);
 
-      // Validate email if provided
+      // Validar email se fornecido
       if (extractedData.email && !validateEmail(extractedData.email)) {
         addBotMessage(
           `❌ E-mail inválido. Por favor, use seu e-mail institucional (.edu.br)`,
@@ -755,10 +755,10 @@ export default function Chatbot() {
         return;
       }
 
-      // Build updated form data FIRST
+      // Construir dados de formulário atualizados PRIMEIRO
       const extractedDate = extractedData.date ? convertDateToISO(extractedData.date) : formData.date;
 
-      // Validate date if provided
+      // Validar data se fornecida
       if (extractedData.date && !validateDate(extractedDate)) {
         addBotMessage(
           "❌ A data deve ser hoje ou no futuro. Por favor, use o formato DD-MM-YYYY (ex: 25-12-2025).",
@@ -767,7 +767,7 @@ export default function Chatbot() {
         return;
       }
 
-      // Validate start time if provided
+      // Validar hora inicial se fornecida
       if (extractedData.startTime && !validateTime(extractedData.startTime)) {
         addBotMessage(
           "❌ Horário de início inválido. Use o formato HH:mm (ex: 14:30).",
@@ -776,7 +776,7 @@ export default function Chatbot() {
         return;
       }
 
-      // Validate end time if provided
+      // Validar hora final se fornecida
       if (extractedData.endTime && !validateTime(extractedData.endTime)) {
         addBotMessage(
           "❌ Horário de término inválido. Use o formato HH:mm (ex: 15:30).",
@@ -796,7 +796,7 @@ export default function Chatbot() {
 
       console.log("Updated formData:", updatedFormData);
 
-      // Update form data with extracted information
+      // Atualizar dados do formulário com informações extraídas
       if (
         extractedData.name ||
         extractedData.email ||
@@ -806,21 +806,21 @@ export default function Chatbot() {
       ) {
         setFormData(updatedFormData);
 
-        // Reset available rooms if date/time changed (so we re-check availability)
+        // Redefinir salas disponíveis se data/hora mudou (para re-verificar disponibilidade)
         if (extractedData.date || extractedData.startTime || extractedData.endTime) {
           setAvailableRooms([]);
         }
       }
 
-      // FIRST: Check if user is trying to select a room (before checking availability)
+      // PRIMEIRO: Verificar se o usuário está tentando selecionar uma sala (antes de verificar disponibilidade)
       if (availableRooms.length > 0 && !updatedFormData.selectedRoomId) {
-        // Check if user mentioned any room name
+        // Verificar se o usuário mencionou qualquer nome de sala
         const mentionedRoomName = userInput.toLowerCase();
         const roomSelection = availableRooms.find((r) =>
           mentionedRoomName.includes(r.name.toLowerCase()),
         );
 
-        // If user tried to select a room but it's not in available rooms list, show error
+        // Se o usuário tentou selecionar uma sala mas não está na lista de salas disponíveis, mostrar erro
         if (!roomSelection && mentionedRoomName.includes("sala")) {
           addBotMessage(
             `❌ A sala mencionada não está disponível para este horário. Por favor, escolha uma das salas listadas acima.`,
@@ -854,7 +854,7 @@ export default function Chatbot() {
             { role: "assistant", content: confirmMessage },
           ]);
 
-          // Store the selected room ID and updated data for the next confirmation step
+          // Armazenar ID da sala selecionada e dados atualizados para a próxima etapa de confirmação
           sessionStorage.setItem(
             "pendingBooking",
             JSON.stringify(updatedDataWithRoom)
@@ -865,7 +865,7 @@ export default function Chatbot() {
         }
       }
 
-      // Check if we have all booking details to check availability
+      // Verificar se temos todos os detalhes de agendamento para verificar disponibilidade
       const hasAllDetails =
         updatedFormData.name &&
         updatedFormData.email &&
@@ -884,7 +884,7 @@ export default function Chatbot() {
       });
 
       if (hasAllDetails && !updatedFormData.selectedRoomId && availableRooms.length === 0) {
-        // We have all details and haven't selected a room yet - check availability
+        // Temos todos os detalhes e ainda não selecionamos uma sala - verificar disponibilidade
         const date = updatedFormData.date!;
         const startTime = updatedFormData.startTime!;
         const endTime = updatedFormData.endTime!;
@@ -957,7 +957,7 @@ export default function Chatbot() {
       }
 
 
-      // Handle confirmation
+      // Lidar com confirmação
       if (
         (userInput.toLowerCase().includes("sim") ||
           userInput.toLowerCase().includes("yes")) &&
@@ -970,13 +970,13 @@ export default function Chatbot() {
           updatedFormData.startTime &&
           updatedFormData.endTime
         ) {
-          // Use the stored pending booking data to ensure all fields are set
+          // Usar os dados de agendamento pendentes armazenados para garantir que todos os campos estejam definidos
           const pendingBooking = sessionStorage.getItem("pendingBooking");
           if (pendingBooking) {
             const bookingData = JSON.parse(pendingBooking);
             setFormData(bookingData);
 
-            // Create booking with the confirmed data
+            // Criar agendamento com os dados confirmados
             try {
               setIsLoading(true);
 
@@ -1002,7 +1002,7 @@ export default function Chatbot() {
               setBooking(data.booking);
               sessionStorage.removeItem("pendingBooking");
 
-              // Format date without timezone issues
+              // Formatar data sem problemas de fuso horário
               const [year, month, day] = bookingData.date.split("-");
               const formattedDate = `${day}/${month}/${year}`;
               const successMessage = `✅ Perfeito! Sua defesa foi agendada com sucesso!\n\n📌 **ID da Reserva: #${data.booking.id}**\n\nDetalhes da Reserva:\n📍 Sala: ${data.booking.roomName}\n📅 Data: ${formattedDate}\n⏰ Horário: ${bookingData.startTime} - ${bookingData.endTime}\n📧 Confirmação enviada para: ${bookingData.email}\n\nGuarde este ID para futuras modificações ou cancelamentos!\n\nObrigado por usar nosso assistente!`;
@@ -1010,7 +1010,7 @@ export default function Chatbot() {
               addBotMessage(successMessage);
               toast.success("Agendamento confirmado!");
 
-              // Reset form data for next booking
+              // Redefinir dados do formulário para próximo agendamento
               setFormData({
                 name: "",
                 email: "",
@@ -1036,7 +1036,7 @@ export default function Chatbot() {
         }
       }
 
-      // Send message to AI for general conversation
+      // Enviar mensagem para IA para conversa geral
       const newConversationHistory = [
         ...conversationHistory,
         { role: "user" as const, content: userInput },

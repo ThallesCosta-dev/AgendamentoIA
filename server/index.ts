@@ -38,14 +38,14 @@ export function createServer() {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
-  // Rooms API
+  // API de Salas
   app.get("/api/rooms", handleListRooms);
   app.get("/api/rooms/:id", handleGetRoom);
   app.post("/api/rooms", handleCreateRoom);
   app.put("/api/rooms/:id", handleUpdateRoom);
   app.delete("/api/rooms/:id", handleDeleteRoom);
 
-  // Bookings API
+  // API de Agendamentos
   app.get("/api/bookings", handleListBookings);
   app.get("/api/bookings/:id", handleGetBooking);
   app.post("/api/bookings/check-availability", handleCheckAvailability);
@@ -54,10 +54,10 @@ export function createServer() {
   app.delete("/api/bookings/:id", handleDeleteBooking);
   app.get("/api/bookings/available-times", handleGetAvailableTimes);
 
-  // Chat API (AI powered)
+  // API de Chat (Powered IA)
   app.post("/api/chat", handleChat);
 
-  // AI Database Operations API
+  // API de Operações de Banco de Dados IA
   app.get("/api/ai/rooms", handleAIListRooms);
   app.get("/api/ai/bookings", handleAIListBookings);
   app.get("/api/ai/bookings/:id", handleAIGetBooking);
@@ -66,7 +66,7 @@ export function createServer() {
   app.put("/api/ai/bookings/:id", handleAIUpdateBooking);
   app.delete("/api/ai/bookings/:id", handleAICancelBooking);
 
-  // Demo routes
+  // Rotas de Demonstração
   app.get("/api/ping", (_req, res) => {
     const ping = process.env.PING_MESSAGE ?? "ping";
     res.json({ message: ping });

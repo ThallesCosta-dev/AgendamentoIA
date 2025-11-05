@@ -40,7 +40,7 @@ VOCÊ DEVE FOCAR EM:
 2.2 Faça UMA PERGUNTA POR VEZ para as informações acima
 3. Validar formatos (email deve ter .edu.br)
 4. Esclarecer dúvidas do usuário
-5. Guiar o usuário naturalmente no processo
+5. Guiar o usu��rio naturalmente no processo
 
 - SEMPRE aguarde que o USUÁRIO forneça os horários
 - Peça explicitamente: "Qual é o horário de INÍCIO que você deseja?"
@@ -139,7 +139,7 @@ export const handleChat: RequestHandler = async (req, res) => {
           details = " - Chave da API inválida ou expirada. Verifique a chave no OpenRouter.";
         }
       } catch (e) {
-        // Keep the default error message
+        // Manter mensagem de erro padrão
       }
 
       console.error(`Full error details: ${errorMessage}${details}`);

@@ -23,8 +23,8 @@ export default function Login() {
     }
 
     setIsLoading(true);
-    
-    // Simulate a small delay for UX
+
+    // Simular um pequeno atraso para UX
     setTimeout(() => {
       if (login(username, password)) {
         toast.success("Login realizado com sucesso!");

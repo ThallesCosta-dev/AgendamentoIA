@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 import path from "path";
 
-// Server build configuration
+// Configuração de compilação do servidor
 export default defineConfig({
   build: {
     lib: {
@@ -15,7 +15,7 @@ export default defineConfig({
     ssr: true,
     rollupOptions: {
       external: [
-        // Node.js built-ins
+        // Módulos integrados do Node.js
         "fs",
         "path",
         "url",
@@ -29,7 +29,7 @@ export default defineConfig({
         "buffer",
         "querystring",
         "child_process",
-        // External dependencies that should not be bundled
+        // Dependências externas que não devem ser agrupadas
         "express",
         "cors",
         "mysql2",
@@ -40,7 +40,7 @@ export default defineConfig({
         entryFileNames: "[name].mjs",
       },
     },
-    minify: false, // Keep readable for debugging
+    minify: false, // Manter legível para depuração
     sourcemap: true,
   },
   resolve: {

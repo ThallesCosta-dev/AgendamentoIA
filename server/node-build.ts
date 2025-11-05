@@ -6,16 +6,16 @@ import * as express from "express";
 const app = createServer();
 const port = process.env.PORT || 3000;
 
-// In production, serve the built SPA files
+// Em produção, servir os arquivos SPA construídos
 const __dirname = import.meta.dirname;
 const distPath = path.join(__dirname, "../spa");
 
-// Serve static files
+// Servir arquivos estáticos
 app.use(express.static(distPath));
 
-// Handle React Router - serve index.html for all non-API routes
+// Lidar com React Router - servir index.html para todas as rotas não-API
 app.get("*", (req, res) => {
-  // Don't serve index.html for API routes
+  // Não servir index.html para rotas de API
   if (req.path.startsWith("/api/") || req.path.startsWith("/health")) {
     return res.status(404).json({ error: "API endpoint not found" });
   }
@@ -25,7 +25,7 @@ app.get("*", (req, res) => {
 
 async function startServer() {
   try {
-    // Initialize database tables
+    // Inicializar tabelas do banco de dados
     await initializeDatabase();
     console.log("✅ Database initialized");
 
@@ -42,7 +42,7 @@ async function startServer() {
 
 startServer();
 
-// Graceful shutdown
+// Desligamento gracioso
 process.on("SIGTERM", () => {
   console.log("🛑 Received SIGTERM, shutting down gracefully");
   process.exit(0);

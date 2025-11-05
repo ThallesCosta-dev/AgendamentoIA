@@ -275,7 +275,7 @@ export const handleAICancelBooking: RequestHandler = async (req, res) => {
       return;
     }
 
-    // Check if booking exists
+    // Verificar se o agendamento existe
     const booking = await getBookingById(id);
     if (!booking) {
       res.status(404).json({

@@ -4,7 +4,7 @@ import path from "path";
 import { createServer } from "./server";
 import { initializeDatabase } from "./server/db";
 
-// https://vitejs.dev/config/
+// https://vitejs.dev/config/ (Configuração do Vite)
 export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
@@ -31,9 +31,9 @@ function expressPlugin(): Plugin {
 
   return {
     name: "express-plugin",
-    apply: "serve", // Only apply during development (serve mode)
+    apply: "serve", // Aplicar apenas durante o desenvolvimento (modo serve)
     async configureServer(server) {
-      // Initialize database only once
+      // Inicializar banco de dados apenas uma vez
       if (!initialized) {
         try {
           await initializeDatabase();
@@ -46,7 +46,7 @@ function expressPlugin(): Plugin {
 
       const app = createServer();
 
-      // Add Express app as middleware to Vite dev server
+      // Adicionar aplicativo Express como middleware ao servidor de desenvolvimento Vite
       server.middlewares.use(app);
     },
   };
