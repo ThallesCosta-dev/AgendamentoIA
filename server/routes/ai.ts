@@ -10,7 +10,10 @@ import {
   validateInstitutionalEmail,
 } from "../data";
 import { CreateBookingRequest, Room, Booking } from "@shared/api";
-import { sendBookingConfirmationEmail } from "../services/email";
+import {
+  sendBookingConfirmationEmail,
+  sendBookingCancellationEmail,
+} from "../services/email";
 
 /**
  * Endpoint de IA: Lista todas as salas disponíveis
@@ -292,6 +295,12 @@ export const handleAICancelBooking: RequestHandler = async (req, res) => {
         error: "Failed to cancel booking",
       });
       return;
+    }
+
+    try {
+      await sendBookingCancellationEmail(booking);
+    } catch (emailError) {
+      console.error("Failed to send cancellation email:", emailError);
     }
 
     res.json({

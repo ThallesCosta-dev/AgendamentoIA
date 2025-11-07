@@ -38,7 +38,7 @@ A aba "Salas" mostra uma tabela com todas as salas cadastradas:
 | ID | Nome | Capacidade | Ações |
 |----|----|-----------|--------|
 | 1 | Sala 101 | 30 | ✏️ Editar, 🗑️ Deletar |
-| 2 | Auditório Principal | 100 | ✏️ Editar, 🗑️ Deletar |
+| 2 | Auditório Principal | 100 | ✏️ Editar, 🗑�� Deletar |
 | 3 | Sala de Conferência A | 20 | ✏️ Editar, 🗑️ Deletar |
 
 ### Criar Nova Sala
@@ -77,12 +77,20 @@ A aba "Salas" mostra uma tabela com todas as salas cadastradas:
 
 ### Visualizar Agendamentos
 
-A aba "Agendamentos" mostra uma tabela com todos os agendamentos:
+A aba "Agendamentos" mostra apenas agendamentos **ATIVOS** (futuros). Agendamentos passados são movidos automaticamente para a aba "Histórico".
 
-| ID | Cliente | Email | Sala | Data | Hora Início | Hora Fim | Ações |
-|----|---------|-------|------|------|------------|----------|--------|
-| 1 | João Silva | joao@uni.edu.br | Sala 101 | 2025-02-15 | 14:00 | 15:00 | ✏️ 🗑️ |
-| 2 | Maria Costa | maria@uni.edu.br | Auditório | 2025-02-15 | 15:00 | 16:00 | ✏️ 🗑️ |
+**Agendamentos Ativos:**
+
+| Sala | ID | Cliente | Email | Data | Hora Início | Hora Fim | Ações |
+|------|----|----|---------|-------|------|------------|----------|--------|
+| Sala 101 | #12345 | João Silva | joao@uni.edu.br | 2025-02-15 | 14:00 | 15:00 | ✏️ 🗑️ |
+| Auditório | #12346 | Maria Costa | maria@uni.edu.br | 2025-02-15 | 15:00 | 16:00 | ✏️ 🗑️ |
+
+**Características:**
+- ID da reserva (`#12345`) aparece junto ao nome da sala
+- Apenas agendamentos com data >= hoje (atual)
+- Ordenados por data de criação (mais recentes primeiro)
+- Totalmente editáveis
 
 ### Editar Agendamento
 
@@ -103,13 +111,37 @@ A aba "Agendamentos" mostra uma tabela com todos os agendamentos:
 1. Clique no ícone **🗑️ Deletar** do agendamento
 2. Confirme a exclusão
 3. O agendamento será removido permanentemente
+4. Um email de cancelamento será enviado ao cliente
 
-### Filtrar Agendamentos
+⚠️ **Nota**: Quando um agendamento é deletado, o cliente recebe automaticamente um email confirmando o cancelamento.
 
-Você pode visualizar agendamentos por:
-- **Data específica**: Use o filtro de data
-- **Cliente**: Procure pelo nome ou email
-- **Sala**: Filtre por sala específica
+### Aba Histórico
+
+A aba **"Histórico"** mostra todos os agendamentos **PASSADOS** (com data anterior a hoje).
+
+**Recursos do Histórico:**
+
+#### Filtrar por Mês
+
+1. Clique na aba **"Histórico"**
+2. Use o seletor **"Filtrar por mês"**
+3. Opções disponíveis:
+   - **"Todos os meses"** - Mostra todos os agendamentos passados
+   - **Mês/Ano** - Filtra agendamentos de um mês específico
+     - Exemplo: "dezembro de 2025"
+
+#### Visualizar Agendamentos Passados
+
+| Sala | ID | Cliente | Email | Data | Hora Início | Hora Fim | Ações |
+|------|----|----|---------|-------|------|------------|----------|--------|
+| Sala 101 | #12340 | Pedro Costa | pedro@uni.edu.br | 2025-01-15 | 14:00 | 15:00 | 🗑️ |
+| Auditório | #12341 | Ana Silva | ana@uni.edu.br | 2025-01-20 | 15:00 | 16:00 | 🗑️ |
+
+**Características:**
+- ID da reserva é sempre visível
+- Agendamentos com aparência levemente enfraquecida (menos opaca)
+- Apenas botão de delete está disponível (sem editar)
+- Ordenados por data (mais recentes primeiro)
 
 ## 📊 Dashboard (Resumo)
 
@@ -180,14 +212,32 @@ Atualmente, você pode:
 - Tirar screenshot para registros
 - Anotar IDs de agendamentos
 
+## 📊 Separação de Agendamentos Ativos vs Histórico
+
+### Como Funciona
+
+O sistema automaticamente:
+
+1. **Aba "Agendamentos"**: Mostra apenas agendamentos com data **hoje ou no futuro**
+2. **Aba "Histórico"**: Mostra apenas agendamentos com data **no passado**
+3. **Atualização Automática**: A cada dia, agendamentos que viram "passado" saem da aba ativa
+
+### Benefícios
+
+- ✅ Painel ativo mais limpo e organizado
+- ✅ Histórico bem organizado com filtro por mês
+- ✅ IDs visíveis em ambas as abas para fácil referência
+- ✅ Facilita auditoria de agendamentos passados
+
 ## 🔄 Fluxo Típico de Administrador
 
 ### Rotina Diária
 
-1. **Acessar painel**: Verificar novos agendamentos
+1. **Acessar painel**: Verificar novos agendamentos na aba "Agendamentos"
 2. **Revisar próximos agendamentos**: Confirmar disponibilidade
 3. **Responder modificações**: Se clientes pedirem mudanças
 4. **Preparar salas**: Garantir que estão prontas
+5. **Acompanhar histórico**: Consultando aba "Histórico" conforme necessário
 
 ### Rotina Semanal
 
@@ -200,8 +250,9 @@ Atualmente, você pode:
 
 1. **Backup de dados**: Salvar banco de dados
 2. **Revisar logs**: Verificar atividades
-3. **Limpeza**: Remover agendamentos muito antigos
+3. **Revisar histórico**: Usar filtro de mês anterior para análise
 4. **Relatório**: Gerar estatísticas do mês
+5. **Limpeza**: Remover agendamentos muito antigos (se necessário)
 
 ## 🆘 Troubleshooting
 

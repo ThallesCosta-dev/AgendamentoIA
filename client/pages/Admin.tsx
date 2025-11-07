@@ -4,7 +4,14 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Room, Booking } from "@shared/api";
-import { Trash2, Plus, Calendar, Users, Edit, X } from "lucide-react";
+import { Trash2, Plus, Calendar, Users, Edit, X, Archive } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -22,6 +29,7 @@ export default function Admin() {
   const [newRoomName, setNewRoomName] = useState("");
   const [newRoomCapacity, setNewRoomCapacity] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedHistoryMonth, setSelectedHistoryMonth] = useState<string>("");
 
   // Estado modal de edição de sala
   const [editRoomModalOpen, setEditRoomModalOpen] = useState(false);
@@ -315,9 +323,55 @@ export default function Admin() {
     return new Date(dateString).toLocaleDateString("pt-BR");
   };
 
-  const sortedBookings = [...bookings].sort(
+  const isBookingPast = (booking: Booking): boolean => {
+    const [year, month, day] = booking.date.split("-").map(Number);
+    const bookingDate = new Date(year, month - 1, day);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    bookingDate.setHours(0, 0, 0, 0);
+    return bookingDate < today;
+  };
+
+  const activeBookings = bookings.filter((b) => !isBookingPast(b));
+  const pastBookings = bookings.filter((b) => isBookingPast(b));
+
+  const sortedBookings = [...activeBookings].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
+
+  const getMonthsList = () => {
+    const months = new Set<string>();
+    pastBookings.forEach((booking) => {
+      const [year, month] = booking.date.split("-");
+      months.add(`${year}-${month}`);
+    });
+    return Array.from(months).sort().reverse();
+  };
+
+  const getFilteredHistoryBookings = () => {
+    if (!selectedHistoryMonth) {
+      return [...pastBookings].sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+      );
+    }
+
+    const filtered = pastBookings.filter((booking) => {
+      return booking.date.startsWith(selectedHistoryMonth);
+    });
+
+    return filtered.sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+    );
+  };
+
+  const getMonthLabel = (yearMonth: string) => {
+    const [year, month] = yearMonth.split("-");
+    const date = new Date(parseInt(year), parseInt(month) - 1);
+    return date.toLocaleDateString("pt-BR", {
+      year: "numeric",
+      month: "long",
+    });
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 p-4 md:p-8">
@@ -332,7 +386,7 @@ export default function Admin() {
         </div>
 
         <Tabs defaultValue="rooms" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-8">
+          <TabsList className="grid w-full grid-cols-3 mb-8">
             <TabsTrigger value="rooms" className="flex items-center gap-2">
               <Users className="h-4 w-4" />
               <span className="hidden sm:inline">Salas</span>
@@ -340,6 +394,10 @@ export default function Admin() {
             <TabsTrigger value="bookings" className="flex items-center gap-2">
               <Calendar className="h-4 w-4" />
               <span className="hidden sm:inline">Agendamentos</span>
+            </TabsTrigger>
+            <TabsTrigger value="history" className="flex items-center gap-2">
+              <Archive className="h-4 w-4" />
+              <span className="hidden sm:inline">Histórico</span>
             </TabsTrigger>
           </TabsList>
 
@@ -426,10 +484,10 @@ export default function Admin() {
 
           {/* Bookings Tab */}
           <TabsContent value="bookings" className="space-y-6">
-            {bookings.length === 0 ? (
+            {sortedBookings.length === 0 ? (
               <Card className="p-8 text-center border border-border">
                 <p className="text-muted-foreground">
-                  Nenhum agendamento ainda.
+                  Nenhum agendamento ativo.
                 </p>
               </Card>
             ) : (
@@ -442,9 +500,14 @@ export default function Admin() {
                     <div className="flex justify-between items-start">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
                         <div>
-                          <h3 className="font-semibold text-foreground">
-                            {booking.roomName}
-                          </h3>
+                          <div className="flex items-center gap-2 mb-2">
+                            <h3 className="font-semibold text-foreground">
+                              {booking.roomName}
+                            </h3>
+                            <span className="text-xs font-mono bg-muted px-2 py-1 rounded text-muted-foreground">
+                              #{booking.id}
+                            </span>
+                          </div>
                           <p className="text-sm text-muted-foreground mt-1">
                             Agendado por: {booking.clientName}
                           </p>
@@ -487,6 +550,100 @@ export default function Admin() {
                   </Card>
                 ))}
               </div>
+            )}
+          </TabsContent>
+
+          {/* History Tab */}
+          <TabsContent value="history" className="space-y-6">
+            {pastBookings.length === 0 ? (
+              <Card className="p-8 text-center border border-border">
+                <p className="text-muted-foreground">
+                  Nenhum agendamento histórico ainda.
+                </p>
+              </Card>
+            ) : (
+              <>
+                <Card className="p-4 border border-border">
+                  <div className="flex items-center gap-4">
+                    <label className="text-sm font-medium text-foreground">
+                      Filtrar por mês:
+                    </label>
+                    <Select value={selectedHistoryMonth} onValueChange={setSelectedHistoryMonth}>
+                      <SelectTrigger className="w-full sm:w-64 border-border focus:border-primary focus:ring-primary">
+                        <SelectValue placeholder="Todos os meses" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Todos os meses</SelectItem>
+                        {getMonthsList().map((monthYear) => (
+                          <SelectItem key={monthYear} value={monthYear}>
+                            {getMonthLabel(monthYear)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </Card>
+
+                <div className="space-y-4">
+                  {getFilteredHistoryBookings().length === 0 ? (
+                    <Card className="p-8 text-center border border-border">
+                      <p className="text-muted-foreground">
+                        Nenhum agendamento neste período.
+                      </p>
+                    </Card>
+                  ) : (
+                    getFilteredHistoryBookings().map((booking) => (
+                      <Card
+                        key={booking.id}
+                        className="p-4 border border-border hover:border-primary/50 transition-colors opacity-75"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <h3 className="font-semibold text-foreground">
+                                  {booking.roomName}
+                                </h3>
+                                <span className="text-xs font-mono bg-muted px-2 py-1 rounded text-muted-foreground">
+                                  #{booking.id}
+                                </span>
+                              </div>
+                              <p className="text-sm text-muted-foreground mt-1">
+                                Agendado por: {booking.clientName}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                E-mail: {booking.clientEmail}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-foreground">
+                                📅 {formatDate(booking.date)}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                ⏰ {booking.startTime} - {booking.endTime}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Criado em:{" "}
+                                {new Date(booking.createdAt).toLocaleString("pt-BR")}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 ml-4">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteBooking(booking.id)}
+                              className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </Card>
+                    ))
+                  )}
+                </div>
+              </>
             )}
           </TabsContent>
         </Tabs>

@@ -2,7 +2,7 @@
 
 Este documento descreve a arquitetura técnica e decisões de design da aplicação SalaAgenda.
 
-## 🏗️ Visão Geral
+## 🏗��� Visão Geral
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -20,7 +20,7 @@ Este documento descreve a arquitetura técnica e decisões de design da aplicaç
                   HTTP REST API
                   (JSON over HTTP)
                         ↓↑
-┌─────────────────────────────────────────────────────────┐
+┌──────────���──────────────────────────────────────────────┐
 │                 SERVIDOR (Node.js/Express)              │
 │                                                          │
 │  ┌─────────────────────────────────────────────────────┐│
@@ -36,7 +36,7 @@ Este documento descreve a arquitetura técnica e decisões de design da aplicaç
 │  │  • Data Access Objs  • OpenRouter Integration       ││
 │  └─────────────────────────────────────────────────────┘│
 │                        ↓                                │
-│  ┌─────────────────────────────────────────────────────┐│
+│  ┌────────────��────────────────────────────────────────┐│
 │  │           Data Access Layer (MySQL)                 ││
 │  │  getRooms()          createBooking()                ││
 │  │  getBookings()       updateBooking()                ││
@@ -49,7 +49,7 @@ Este documento descreve a arquitetura técnica e decisões de design da aplicaç
 │                                                          │
 │  ┌──────────────┐  ┌──────────────────────────────────┐│
 │  │ rooms        │  │ bookings                         ││
-│  ├──────────────┤  ├──────────────────────────────────┤│
+│  ���──────────────┤  ├──────────────────────────────────┤│
 │  │ id           │  │ id                               ││
 │  │ name         │  │ room_id (FK)                     ││
 │  │ capacity     │  │ room_name                        ││
@@ -60,7 +60,7 @@ Este documento descreve a arquitetura técnica e decisões de design da aplicaç
 │                    │ end_time                         ││
 │                    │ created_at                       ││
 │                    └──────────────────────────────────┘│
-└─────────────────────────────────────────────────────────┘
+└────────────────────────��────────────────────────────────┘
 ```
 
 ## 📁 Componentes Principais
@@ -114,6 +114,29 @@ Success Notification (Toast)
         ↓
 Email Confirmation
 ```
+
+#### Página Admin (Admin.tsx)
+
+Painel de gerenciamento com três abas principais:
+
+**1. Salas** - Gerenciar salas
+- Criar nova sala
+- Editar sala existente
+- Deletar sala
+
+**2. Agendamentos Ativos** - Agendamentos futuros apenas
+- Exibe apenas agendamentos com data >= hoje
+- Mostra ID da reserva para cada agendamento
+- Permite editar agendamentos ativos
+- Permite deletar agendamentos ativos
+- Envia email de cancelamento ao deletar
+
+**3. Histórico** - Agendamentos passados
+- Exibe apenas agendamentos com data < hoje
+- Filtro por mês/ano selecionável
+- Mostra ID da reserva para cada agendamento
+- Permite deletar apenas (sem editar)
+- Ordenado por data (mais recentes primeiro)
 
 #### Componente Chatbot
 
@@ -527,16 +550,100 @@ FAIL            Deploy to Netlify
                 User sees app
 ```
 
+## 📨 Sistema de Emails
+
+### Confirmação de Agendamento
+
+Quando um agendamento é criado:
+1. A API chama `sendBookingConfirmationEmail(booking)`
+2. Template HTML responsivo é gerado com detalhes
+3. Email é enviado via Gmail/Nodemailer
+
+**Dados inclusos no email:**
+- ID da reserva (#12345)
+- Nome da sala
+- Data e horário
+- Email do cliente
+- Links para modificar ou cancelar
+
+### Cancelamento de Agendamento
+
+Quando um agendamento é deletado:
+1. A API chama `sendBookingCancellationEmail(booking)`
+2. Template HTML diferenciado (vermelho) confirma cancelamento
+3. Email é enviado ao cliente
+
+**Fluxo de cancelamento:**
+```
+User deletes booking
+        ↓
+API validates booking exists
+        ↓
+Delete from database
+        ↓
+Send cancellation email
+        ↓
+Return success response
+```
+
+## 🔄 Separação de Agendamentos Ativos vs Histórico
+
+### Implementação no Admin Panel
+
+**client/pages/Admin.tsx** gerencia a separação:
+
+```typescript
+const isBookingPast = (booking: Booking): boolean => {
+  // Compara data do agendamento com hoje
+  return bookingDate < today;
+};
+
+const activeBookings = bookings.filter((b) => !isBookingPast(b));
+const pastBookings = bookings.filter((b) => isBookingPast(b));
+```
+
+### Três Abas do Admin
+
+| Aba | Dados Mostrados | Ações | Ordenação |
+|-----|-----------------|-------|-----------|
+| Salas | Todas salas | Criar/Editar/Deletar | Por ID |
+| Agendamentos | data >= hoje | Editar/Deletar | Por data de criação |
+| Histórico | data < hoje | Deletar apenas | Por data (desc) |
+
+### Filtro de Histórico
+
+O histórico possui filtro de mês:
+
+```typescript
+const getMonthsList = () => {
+  // Extrai todos os meses com agendamentos passados
+  return Array.from(months).sort().reverse();
+};
+
+const getFilteredHistoryBookings = () => {
+  // Filtra por mês selecionado ou mostra tudo
+  if (!selectedHistoryMonth) return [...pastBookings];
+  return pastBookings.filter(b => b.date.startsWith(selectedHistoryMonth));
+};
+```
+
 ## 📚 Recursos Importantes
 
 - **Tipos**: `shared/api.ts` - Fonte única de verdade
 - **Schemas**: `server/db.ts` - Estrutura de dados
 - **Routes**: `server/index.ts` - Mapeamento de endpoints
 - **Componentes**: `client/components/` - UI React
+- **Email Service**: `server/services/email.ts` - Confirmação e cancelamento
+- **Admin Panel**: `client/pages/Admin.tsx` - Gerenciamento com 3 abas
 
 ---
 
-**Versão**: 1.0.0
+**Versão**: 1.1.0
 **Última atualização**: 2024
+**Mudanças Recentes**:
+- ✅ Adicionado sistema de emails de cancelamento
+- ✅ Adicionado ID de reserva visível no admin
+- ✅ Separação de agendamentos ativos vs histórico
+- ✅ Filtro de histórico por mês
 
 Architecture is destiny! 🏛️

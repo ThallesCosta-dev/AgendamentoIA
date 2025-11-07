@@ -26,7 +26,7 @@ Tudo isso através de uma conversa natural com um chatbot!
 ┌─────────────────────────────────────────┐
 │  Assistente de Agendamento         [⊕]  │
 │  Reserve sua sala de defesa de tese     │
-├─────────────────────────────────────────┤
+├───���─────────────────────────────────────┤
 │                                         │
 │  Bot: Olá! 👋 Bem-vindo ao            │
 │  assistente de agendamento de salas     │
@@ -160,6 +160,8 @@ Você receberá:
 
 ✅ **Cancelado**: Seu agendamento foi deletado
 
+📧 **Email de Cancelamento**: Você receberá um email de confirmação do cancelamento com todos os detalhes da reserva cancelada
+
 ## 💡 Dicas Úteis
 
 ### Linguagem Natural
@@ -170,7 +172,7 @@ O chatbot entende linguagem natural! Você pode:
 
 ### Correção de Dados
 Se erra uma informação:
-- Digite a informação correta no próximo mensagem
+- Digite a informação correta no pr��ximo mensagem
 - O sistema aceitará a última informação válida
 
 ### Múltiplos Agendamentos
@@ -217,9 +219,17 @@ Após agendar, você recebe um ID:
 ### Não recebo email de confirmação
 ❌ Problema: Email pode estar no spam
 ✅ Solução:
-- Verifique a pasta de spam
+- Verifique a pasta de spam ou promoções
 - Verifique se o email está correto
+- Adicione `atendimentoia.naoresponda@gmail.com` aos contatos confiáveis
 - Contate o administrador
+
+### Não recebo email de cancelamento
+❌ Problema: Email de cancelamento pode estar no spam
+✅ Solução:
+- Verifique a pasta de spam
+- Email de cancelamento é enviado automaticamente
+- Se ainda não receber, entre em contato com o administrador
 
 ## ✍️ Exemplo Completo
 
