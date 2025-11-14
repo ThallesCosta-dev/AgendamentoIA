@@ -28,6 +28,8 @@ import {
   handleAIUpdateBooking,
   handleAICancelBooking,
   handleAICheckAvailability,
+  handleEmailClassification,
+  handleEmailResponseGeneration,
 } from "./routes/ai";
 
 export function createServer() {
