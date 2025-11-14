@@ -85,6 +85,16 @@ export function createServer() {
   app.post("/api/ai/email/classify", handleEmailClassification);
   app.post("/api/ai/email/response", handleEmailResponseGeneration);
 
+  // API de Email Processor Management
+  app.get("/api/email-processor/status", handleEmailProcessorStatus);
+  app.post("/api/email-processor/start", handleEmailProcessorStart);
+  app.post("/api/email-processor/stop", handleEmailProcessorStop);
+  app.post("/api/email-processor/manual-process", handleEmailProcessorManualProcess);
+  app.get("/api/email-processor/stats", handleEmailProcessorStats);
+  app.get("/api/email-processor/logs", handleEmailProcessorLogs);
+  app.get("/api/email-processor/logs/by-date", handleEmailProcessorLogsByDate);
+  app.post("/api/email-processor/test", handleEmailProcessorTest);
+
   // Rotas de Demonstração
   app.get("/api/ping", (_req, res) => {
     const ping = process.env.PING_MESSAGE ?? "ping";
