@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { initializeDatabase } from "./db";
+import { initializeEmailProcessor } from "./services/emailProcessor";
 import { handleDemo } from "./routes/demo";
 import {
   handleListRooms,
