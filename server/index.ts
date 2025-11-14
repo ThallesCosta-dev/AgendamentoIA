@@ -31,6 +31,19 @@ import {
   handleEmailClassification,
   handleEmailResponseGeneration,
 } from "./routes/ai";
+import {
+  initializeEmailProcessor,
+} from "./services/emailProcessor";
+import {
+  handleEmailProcessorStatus,
+  handleEmailProcessorStart,
+  handleEmailProcessorStop,
+  handleEmailProcessorManualProcess,
+  handleEmailProcessorStats,
+  handleEmailProcessorLogs,
+  handleEmailProcessorLogsByDate,
+  handleEmailProcessorTest,
+} from "./routes/emailProcessor";
 
 export function createServer() {
   const app = express();
