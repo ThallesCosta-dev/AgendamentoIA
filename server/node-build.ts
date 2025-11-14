@@ -24,9 +24,9 @@ app.get("*", (req, res) => {
 
 async function startServer() {
   try {
-    // Inicializar tabelas do banco de dados
-    await initializeDatabase();
-    console.log("✅ Database initialized");
+    // Inicializar banco de dados e email processor
+    await initializeApp();
+    console.log("✅ App initialized");
 
     app.listen(port, () => {
       console.log(`🚀 Fusion Starter server running on port ${port}`);
