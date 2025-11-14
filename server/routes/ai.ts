@@ -14,6 +14,7 @@ import {
   sendBookingConfirmationEmail,
   sendBookingCancellationEmail,
 } from "../services/email";
+import { classifyEmail } from "../services/emailClassifier";
 
 /**
  * Endpoint de IA: Lista todas as salas disponíveis
