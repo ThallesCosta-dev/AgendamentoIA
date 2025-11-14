@@ -33,9 +33,6 @@ import {
   handleEmailResponseGeneration,
 } from "./routes/ai";
 import {
-  initializeEmailProcessor,
-} from "./services/emailProcessor";
-import {
   handleEmailProcessorStatus,
   handleEmailProcessorStart,
   handleEmailProcessorStop,
