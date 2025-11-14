@@ -1,6 +1,5 @@
 import path from "path";
-import { createServer } from "./index";
-import { initializeDatabase } from "./db";
+import { createServer, initializeApp } from "./index";
 import * as express from "express";
 
 const app = createServer();
