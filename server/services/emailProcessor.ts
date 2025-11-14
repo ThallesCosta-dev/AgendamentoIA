@@ -70,10 +70,7 @@ class EmailProcessor {
       // Start cron job
       this.cronJob = cron.schedule(
         `*/${this.config.checkIntervalMinutes} * * * *`,
-        () => this.processEmails(),
-        {
-          scheduled: false
-        }
+        () => this.processEmails()
       );
 
       this.cronJob.start();
