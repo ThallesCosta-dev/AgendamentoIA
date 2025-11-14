@@ -1,6 +1,5 @@
 import path from "path";
-import { createServer } from "./index";
-import { initializeDatabase } from "./db";
+import { createServer, initializeApp } from "./index";
 import * as express from "express";
 
 const app = createServer();
@@ -14,10 +13,15 @@ const distPath = path.join(__dirname, "../spa");
 app.use(express.static(distPath));
 
 // Lidar com React Router - servir index.html para todas as rotas não-API
-app.get("*", (req, res) => {
+app.use((req, res, next) => {
   // Não servir index.html para rotas de API
   if (req.path.startsWith("/api/") || req.path.startsWith("/health")) {
     return res.status(404).json({ error: "API endpoint not found" });
+  }
+
+  // Se for um arquivo estático, continua para o next
+  if (req.path.includes('.')) {
+    return next();
   }
 
   res.sendFile(path.join(distPath, "index.html"));
@@ -25,9 +29,9 @@ app.get("*", (req, res) => {
 
 async function startServer() {
   try {
-    // Inicializar tabelas do banco de dados
-    await initializeDatabase();
-    console.log("✅ Database initialized");
+    // Inicializar banco de dados e email processor
+    await initializeApp();
+    console.log("✅ App initialized");
 
     app.listen(port, () => {
       console.log(`🚀 Fusion Starter server running on port ${port}`);

@@ -28,7 +28,33 @@ import {
   handleAIUpdateBooking,
   handleAICancelBooking,
   handleAICheckAvailability,
+  handleEmailClassification,
+  handleEmailResponseGeneration,
 } from "./routes/ai";
+import {
+  handleEmailProcessorStatus,
+  handleEmailProcessorStart,
+  handleEmailProcessorStop,
+  handleEmailProcessorManualProcess,
+  handleEmailProcessorStats,
+  handleEmailProcessorLogs,
+  handleEmailProcessorLogsByDate,
+  handleEmailProcessorTest,
+} from "./routes/emailProcessor";
+import { initializeEmailProcessor } from "./services/emailProcessor";
+
+export async function initializeApp() {
+  // Initialize database
+  await initializeDatabase();
+
+  // Initialize email processor (will only start if configured)
+  const emailProcessor = initializeEmailProcessor();
+  if (emailProcessor) {
+    console.log("Email processor initialized (manual start required)");
+  } else {
+    console.log("Email processor not configured");
+  }
+}
 
 export function createServer() {
   const app = express();
@@ -65,6 +91,20 @@ export function createServer() {
   app.post("/api/ai/bookings/check-availability", handleAICheckAvailability);
   app.put("/api/ai/bookings/:id", handleAIUpdateBooking);
   app.delete("/api/ai/bookings/:id", handleAICancelBooking);
+
+  // API de Email Processing IA
+  app.post("/api/ai/email/classify", handleEmailClassification);
+  app.post("/api/ai/email/response", handleEmailResponseGeneration);
+
+  // API de Email Processor Management
+  app.get("/api/email-processor/status", handleEmailProcessorStatus);
+  app.post("/api/email-processor/start", handleEmailProcessorStart);
+  app.post("/api/email-processor/stop", handleEmailProcessorStop);
+  app.post("/api/email-processor/manual-process", handleEmailProcessorManualProcess);
+  app.get("/api/email-processor/stats", handleEmailProcessorStats);
+  app.get("/api/email-processor/logs", handleEmailProcessorLogs);
+  app.get("/api/email-processor/logs/by-date", handleEmailProcessorLogsByDate);
+  app.post("/api/email-processor/test", handleEmailProcessorTest);
 
   // Rotas de Demonstração
   app.get("/api/ping", (_req, res) => {
