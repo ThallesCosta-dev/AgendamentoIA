@@ -42,6 +42,7 @@ import {
   handleEmailProcessorLogsByDate,
   handleEmailProcessorTest,
 } from "./routes/emailProcessor";
+import { initializeEmailProcessor } from "./services/emailProcessor";
 
 export async function initializeApp() {
   // Initialize database
