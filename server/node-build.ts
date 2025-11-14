@@ -13,7 +13,7 @@ const distPath = path.join(__dirname, "../spa");
 app.use(express.static(distPath));
 
 // Lidar com React Router - servir index.html para todas as rotas não-API
-app.get("*", (req, res) => {
+app.get("/*", (req, res) => {
   // Não servir index.html para rotas de API
   if (req.path.startsWith("/api/") || req.path.startsWith("/health")) {
     return res.status(404).json({ error: "API endpoint not found" });
