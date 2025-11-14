@@ -46,6 +46,19 @@ import {
   handleEmailProcessorTest,
 } from "./routes/emailProcessor";
 
+export async function initializeApp() {
+  // Initialize database
+  await initializeDatabase();
+
+  // Initialize email processor (will only start if configured)
+  const emailProcessor = initializeEmailProcessor();
+  if (emailProcessor) {
+    console.log("Email processor initialized (manual start required)");
+  } else {
+    console.log("Email processor not configured");
+  }
+}
+
 export function createServer() {
   const app = express();
 
