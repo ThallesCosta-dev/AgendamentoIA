@@ -361,3 +361,80 @@ export const handleAICheckAvailability: RequestHandler = async (req, res) => {
     });
   }
 };
+
+/**
+ * Endpoint de IA: Classifica email para processamento de reservas
+ * Usado pelo sistema de email para classificar emails recebidos
+ */
+export const handleEmailClassification: RequestHandler = async (req, res) => {
+  try {
+    const { emailContent, subject, senderEmail } = req.body;
+
+    if (!emailContent) {
+      res.status(400).json({
+        success: false,
+        error: "Email content is required",
+      });
+      return;
+    }
+
+    const classification = classifyEmail(emailContent, subject || "", senderEmail || "");
+
+    res.json({
+      success: true,
+      classification,
+    });
+  } catch (error) {
+    console.error("Error classifying email:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to classify email",
+    });
+  }
+};
+
+/**
+ * Endpoint de IA: Gera resposta baseada na classificação do email
+ * Usado pelo sistema de email para gerar respostas apropriadas
+ */
+export const handleEmailResponseGeneration: RequestHandler = async (req, res) => {
+  try {
+    const {
+      classification,
+      extractedData,
+      missingFields,
+      senderEmail,
+      originalSubject
+    } = req.body;
+
+    if (!classification || !senderEmail) {
+      res.status(400).json({
+        success: false,
+        error: "Classification and senderEmail are required",
+      });
+      return;
+    }
+
+    // Here we would generate the response based on classification
+    // For now, we'll return the classification data for the email processor to handle
+    const responseData = {
+      type: classification,
+      senderEmail,
+      originalSubject,
+      extractedData,
+      missingFields,
+      shouldProcessDirectly: classification === "BOOKING_REQUEST" && missingFields.length === 0,
+    };
+
+    res.json({
+      success: true,
+      responseData,
+    });
+  } catch (error) {
+    console.error("Error generating email response:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to generate email response",
+    });
+  }
+};
