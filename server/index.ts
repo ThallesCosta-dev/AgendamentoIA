@@ -81,6 +81,10 @@ export function createServer() {
   app.put("/api/ai/bookings/:id", handleAIUpdateBooking);
   app.delete("/api/ai/bookings/:id", handleAICancelBooking);
 
+  // API de Email Processing IA
+  app.post("/api/ai/email/classify", handleEmailClassification);
+  app.post("/api/ai/email/response", handleEmailResponseGeneration);
+
   // Rotas de Demonstração
   app.get("/api/ping", (_req, res) => {
     const ping = process.env.PING_MESSAGE ?? "ping";
