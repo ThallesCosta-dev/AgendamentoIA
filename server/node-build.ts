@@ -34,7 +34,7 @@ async function startServer() {
     console.log("✅ App initialized");
 
     app.listen(port, () => {
-      console.log(`🚀 Fusion Starter server running on port ${port}`);
+      console.log(`🚀 SalaAgenda — servidor rodando na porta ${port}`);
       console.log(`📱 Frontend: http://localhost:${port}`);
       console.log(`🔧 API: http://localhost:${port}/api`);
     });
@@ -45,6 +45,16 @@ async function startServer() {
 }
 
 startServer();
+
+// Logging de erros em nível de processo — evita que rejeições não tratadas
+// derrubem o servidor silenciosamente
+process.on("unhandledRejection", (reason) => {
+  console.error("❌ Unhandled promise rejection:", reason);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("❌ Uncaught exception:", error);
+});
 
 // Desligamento gracioso
 process.on("SIGTERM", () => {

@@ -62,6 +62,7 @@ export default function Header() {
           <div className="flex items-center gap-2">
             <Link
               to="/admin"
+              aria-label="Painel administrativo"
               className={cn(
                 "inline-flex items-center gap-2 text-sm font-medium transition-colors hover:text-primary",
                 isActive("/admin") ? "text-primary" : "text-muted-foreground",
@@ -74,6 +75,7 @@ export default function Header() {
                 onClick={handleLogout}
                 variant="ghost"
                 size="sm"
+                aria-label="Sair"
                 className="text-muted-foreground hover:text-primary"
               >
                 <LogOut className="h-5 w-5" />

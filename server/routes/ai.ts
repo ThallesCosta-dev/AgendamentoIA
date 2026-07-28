@@ -1,79 +1,41 @@
 import { RequestHandler } from "express";
 import {
   getRooms,
-  getBookings,
-  getBookingsByRoom,
-  createBooking,
   deleteBookingById,
   updateBookingById,
   getBookingById,
-  validateInstitutionalEmail,
+  bookingExists,
 } from "../data";
-import { CreateBookingRequest, Room, Booking } from "@shared/api";
 import {
-  sendBookingConfirmationEmail,
-  sendBookingCancellationEmail,
-} from "../services/email";
+  validateDate,
+  validateTime,
+  validateTimeRange,
+  maskEmail,
+} from "../utils/validation";
+import { sendBookingCancellationEmail } from "../services/email";
 import { classifyEmail } from "../services/emailClassifier";
+import {
+  generateInformationRequestResponse,
+  generateIncompleteBookingResponse,
+} from "../services/emailResponder";
 
-/**
- * Endpoint de IA: Lista todas as salas disponíveis
- * Usado pela IA para verificar o inventário de salas
- */
-export const handleAIListRooms: RequestHandler = async (_req, res) => {
-  try {
-    const rooms = await getRooms();
-    res.json({
-      success: true,
-      rooms,
-      count: rooms.length,
-    });
-  } catch (error) {
-    console.error("Error listing rooms:", error);
-    res.status(500).json({
-      success: false,
-      error: "Failed to list rooms",
-    });
-  }
-};
+const EMAIL_MISMATCH_ERROR =
+  "O email informado não corresponde ao email da reserva";
 
-/**
- * Endpoint de IA: Lista todos os agendamentos com filtro opcional
- * Usado pela IA para verificar o status dos agendamentos
- */
-export const handleAIListBookings: RequestHandler = async (req, res) => {
-  try {
-    const { email, date, roomId } = req.query;
-
-    let bookings = await getBookings();
-
-    if (email) {
-      bookings = bookings.filter((b) => b.clientEmail === email);
-    }
-    if (date) {
-      bookings = bookings.filter((b) => b.date === date);
-    }
-    if (roomId) {
-      bookings = bookings.filter((b) => b.roomId === roomId);
-    }
-
-    res.json({
-      success: true,
-      bookings,
-      count: bookings.length,
-    });
-  } catch (error) {
-    console.error("Error listing bookings:", error);
-    res.status(500).json({
-      success: false,
-      error: "Failed to list bookings",
-    });
-  }
-};
+/** Comparação de emails caso-insensível (com trim). */
+function emailsMatch(a: string, b: string): boolean {
+  return (
+    typeof a === "string" &&
+    typeof b === "string" &&
+    a.trim().toLowerCase() === b.trim().toLowerCase()
+  );
+}
 
 /**
  * Endpoint de IA: Obtém um agendamento específico por ID
- * Usado pela IA para recuperar detalhes do agendamento para modificação ou cancelamento
+ * Público, mas o email do cliente é retornado MASCARADO
+ * (ex.: "th***@ioc.fiocruz.br") — a verificação de posse acontece
+ * nas rotas de modificação/cancelamento.
  */
 export const handleAIGetBooking: RequestHandler = async (req, res) => {
   try {
@@ -82,7 +44,7 @@ export const handleAIGetBooking: RequestHandler = async (req, res) => {
     if (!id) {
       res.status(400).json({
         success: false,
-        error: "Booking ID is required",
+        error: "O ID do agendamento é obrigatório",
       });
       return;
     }
@@ -91,104 +53,32 @@ export const handleAIGetBooking: RequestHandler = async (req, res) => {
     if (!booking) {
       res.status(404).json({
         success: false,
-        error: `Booking with ID ${id} not found`,
+        error: `Agendamento com ID ${id} não encontrado`,
       });
       return;
     }
 
     res.json({
       success: true,
-      booking,
+      booking: {
+        ...booking,
+        clientEmail: maskEmail(booking.clientEmail),
+      },
     });
   } catch (error) {
     console.error("Error getting booking:", error);
     res.status(500).json({
       success: false,
-      error: "Failed to get booking",
-    });
-  }
-};
-
-/**
- * Endpoint de IA: Cria um novo agendamento
- * Usado pela IA para fazer reservas
- */
-export const handleAICreateBooking: RequestHandler = async (req, res) => {
-  try {
-    const { roomId, clientName, clientEmail, date, startTime, endTime } =
-      req.body as CreateBookingRequest;
-
-    // Validação
-    if (
-      !roomId ||
-      !clientName ||
-      !clientEmail ||
-      !date ||
-      !startTime ||
-      !endTime
-    ) {
-      res.status(400).json({
-        success: false,
-        error: "Missing required fields",
-      });
-      return;
-    }
-
-    // Valida email institucional
-    if (!validateInstitutionalEmail(clientEmail)) {
-      res.status(400).json({
-        success: false,
-        error:
-          "Email must be from a Brazilian educational institution (.edu.br)",
-      });
-      return;
-    }
-
-    // Verifica se a sala existe
-    const rooms = await getRooms();
-    const room = rooms.find((r) => r.id === roomId);
-    if (!room) {
-      res.status(404).json({
-        success: false,
-        error: "Room not found",
-      });
-      return;
-    }
-
-    // O agendamento será criado pela API principal, isto é para IA
-    const booking = await createBooking({
-      roomId,
-      roomName: room.name,
-      clientName,
-      clientEmail,
-      date,
-      startTime,
-      endTime,
-    });
-
-    try {
-      await sendBookingConfirmationEmail(booking);
-    } catch (emailError) {
-      console.error("Failed to send confirmation email:", emailError);
-    }
-
-    res.status(201).json({
-      success: true,
-      booking,
-      message: `Booking created successfully with ID: ${booking.id}`,
-    });
-  } catch (error) {
-    console.error("Error creating booking:", error);
-    res.status(500).json({
-      success: false,
-      error: "Failed to create booking",
+      error: "Não foi possível obter o agendamento",
     });
   }
 };
 
 /**
  * Endpoint de IA: Atualiza/modifica um agendamento existente por ID
- * Usado pela IA para alterar detalhes do agendamento (data, hora, sala)
+ * O campo `clientEmail` do corpo é usado APENAS como fator de verificação:
+ * deve corresponder (caso-insensível) ao email da reserva. Ele nunca altera
+ * o email armazenado.
  */
 export const handleAIUpdateBooking: RequestHandler = async (req, res) => {
   try {
@@ -199,7 +89,16 @@ export const handleAIUpdateBooking: RequestHandler = async (req, res) => {
     if (!id) {
       res.status(400).json({
         success: false,
-        error: "Booking ID is required",
+        error: "O ID do agendamento é obrigatório",
+      });
+      return;
+    }
+
+    if (!clientEmail || typeof clientEmail !== "string") {
+      res.status(400).json({
+        success: false,
+        error:
+          "O campo clientEmail é obrigatório para verificar a titularidade da reserva",
       });
       return;
     }
@@ -209,17 +108,49 @@ export const handleAIUpdateBooking: RequestHandler = async (req, res) => {
     if (!existingBooking) {
       res.status(404).json({
         success: false,
-        error: `Booking with ID ${id} not found`,
+        error: `Agendamento com ID ${id} não encontrado`,
       });
       return;
     }
 
-    // Valida email se foi alterado
-    if (clientEmail && !validateInstitutionalEmail(clientEmail)) {
+    // Verificação de titularidade: o email informado deve corresponder
+    // ao email da reserva
+    if (!emailsMatch(clientEmail, existingBooking.clientEmail)) {
+      res.status(403).json({
+        success: false,
+        error: EMAIL_MISMATCH_ERROR,
+      });
+      return;
+    }
+
+    // Valores efetivos após a atualização
+    const effectiveDate = date || existingBooking.date;
+    const effectiveStartTime = startTime || existingBooking.startTime;
+    const effectiveEndTime = endTime || existingBooking.endTime;
+    const effectiveRoomId = roomId || existingBooking.roomId;
+
+    // Valida data e horários efetivos
+    if (!validateDate(effectiveDate)) {
       res.status(400).json({
         success: false,
         error:
-          "Email must be from a Brazilian educational institution (.edu.br)",
+          "Data inválida. A data deve ser hoje ou no futuro (formato: YYYY-MM-DD)",
+      });
+      return;
+    }
+
+    if (!validateTime(effectiveStartTime) || !validateTime(effectiveEndTime)) {
+      res.status(400).json({
+        success: false,
+        error: "Horário inválido (use o formato HH:mm)",
+      });
+      return;
+    }
+
+    if (!validateTimeRange(effectiveStartTime, effectiveEndTime)) {
+      res.status(400).json({
+        success: false,
+        error: "O horário de término deve ser depois do horário de início",
       });
       return;
     }
@@ -228,53 +159,81 @@ export const handleAIUpdateBooking: RequestHandler = async (req, res) => {
     let roomName = existingBooking.roomName;
     if (roomId) {
       const rooms = await getRooms();
-      const room = rooms.find((r) => r.id === roomId);
+      const room = rooms.find((r) => String(r.id) === String(roomId));
       if (!room) {
         res.status(404).json({
           success: false,
-          error: "Room not found",
+          error: "Sala não encontrada",
         });
         return;
       }
       roomName = room.name;
     }
 
+    // Rejeita a atualização se colidir com OUTRO agendamento
+    const hasConflict = await bookingExists(
+      effectiveRoomId,
+      effectiveDate,
+      effectiveStartTime,
+      effectiveEndTime,
+      id,
+    );
+    if (hasConflict) {
+      res.status(409).json({
+        success: false,
+        error: "A sala não está disponível no horário solicitado",
+      });
+      return;
+    }
+
+    // clientEmail NÃO é um campo de atualização nesta rota — o email
+    // armazenado permanece o mesmo.
     const updatedBooking = await updateBookingById(id, {
       clientName: clientName || existingBooking.clientName,
-      clientEmail: clientEmail || existingBooking.clientEmail,
-      date: date || existingBooking.date,
-      startTime: startTime || existingBooking.startTime,
-      endTime: endTime || existingBooking.endTime,
-      roomId: roomId || existingBooking.roomId,
+      date: effectiveDate,
+      startTime: effectiveStartTime,
+      endTime: effectiveEndTime,
+      roomId: effectiveRoomId,
       roomName,
     });
 
     res.json({
       success: true,
       booking: updatedBooking,
-      message: `Booking ${id} updated successfully`,
+      message: `Agendamento ${id} atualizado com sucesso`,
     });
   } catch (error) {
     console.error("Error updating booking:", error);
     res.status(500).json({
       success: false,
-      error: "Failed to update booking",
+      error: "Não foi possível atualizar o agendamento",
     });
   }
 };
 
 /**
  * Endpoint de IA: Deleta/cancela um agendamento por ID
- * Usado pela IA para cancelar reservas
+ * Exige o parâmetro de query `email` correspondendo (caso-insensível)
+ * ao email da reserva.
  */
 export const handleAICancelBooking: RequestHandler = async (req, res) => {
   try {
     const { id } = req.params;
+    const email = req.query.email;
 
     if (!id) {
       res.status(400).json({
         success: false,
-        error: "Booking ID is required",
+        error: "O ID do agendamento é obrigatório",
+      });
+      return;
+    }
+
+    if (!email || typeof email !== "string") {
+      res.status(400).json({
+        success: false,
+        error:
+          "O parâmetro email é obrigatório para verificar a titularidade da reserva",
       });
       return;
     }
@@ -284,7 +243,16 @@ export const handleAICancelBooking: RequestHandler = async (req, res) => {
     if (!booking) {
       res.status(404).json({
         success: false,
-        error: `Booking with ID ${id} not found`,
+        error: `Agendamento com ID ${id} não encontrado`,
+      });
+      return;
+    }
+
+    // Verificação de titularidade
+    if (!emailsMatch(email, booking.clientEmail)) {
+      res.status(403).json({
+        success: false,
+        error: EMAIL_MISMATCH_ERROR,
       });
       return;
     }
@@ -293,7 +261,7 @@ export const handleAICancelBooking: RequestHandler = async (req, res) => {
     if (!success) {
       res.status(500).json({
         success: false,
-        error: "Failed to cancel booking",
+        error: "Não foi possível cancelar o agendamento",
       });
       return;
     }
@@ -306,58 +274,14 @@ export const handleAICancelBooking: RequestHandler = async (req, res) => {
 
     res.json({
       success: true,
-      message: `Booking ${id} cancelled successfully`,
+      message: `Agendamento ${id} cancelado com sucesso`,
       cancelledBooking: booking,
     });
   } catch (error) {
     console.error("Error cancelling booking:", error);
     res.status(500).json({
       success: false,
-      error: "Failed to cancel booking",
-    });
-  }
-};
-
-/**
- * Endpoint de IA: Verifica disponibilidade de salas
- * Usado pela IA para verificar se as salas estão disponíveis para um intervalo de tempo específico
- */
-export const handleAICheckAvailability: RequestHandler = async (req, res) => {
-  try {
-    const { date, startTime, endTime } = req.body;
-
-    if (!date || !startTime || !endTime) {
-      res.status(400).json({
-        success: false,
-        error: "Date, startTime, and endTime are required",
-      });
-      return;
-    }
-
-    const allRooms = await getRooms();
-    const allBookings = await getBookings();
-
-    // Filtra agendamentos para a data/hora solicitada
-    const conflictingBookings = allBookings.filter((b) => {
-      return b.date === date && b.startTime < endTime && b.endTime > startTime;
-    });
-
-    const bookedRoomIds = new Set(conflictingBookings.map((b) => b.roomId));
-    const availableRooms = allRooms.filter((r) => !bookedRoomIds.has(r.id));
-
-    res.json({
-      success: true,
-      availableRooms,
-      bookedRooms: allRooms.filter((r) => bookedRoomIds.has(r.id)),
-      date,
-      startTime,
-      endTime,
-    });
-  } catch (error) {
-    console.error("Error checking availability:", error);
-    res.status(500).json({
-      success: false,
-      error: "Failed to check availability",
+      error: "Não foi possível cancelar o agendamento",
     });
   }
 };
@@ -373,12 +297,16 @@ export const handleEmailClassification: RequestHandler = async (req, res) => {
     if (!emailContent) {
       res.status(400).json({
         success: false,
-        error: "Email content is required",
+        error: "O conteúdo do email é obrigatório",
       });
       return;
     }
 
-    const classification = classifyEmail(emailContent, subject || "", senderEmail || "");
+    const classification = classifyEmail(
+      emailContent,
+      subject || "",
+      senderEmail || "",
+    );
 
     res.json({
       success: true,
@@ -388,43 +316,64 @@ export const handleEmailClassification: RequestHandler = async (req, res) => {
     console.error("Error classifying email:", error);
     res.status(500).json({
       success: false,
-      error: "Failed to classify email",
+      error: "Não foi possível classificar o email",
     });
   }
 };
 
 /**
  * Endpoint de IA: Gera resposta baseada na classificação do email
- * Usado pelo sistema de email para gerar respostas apropriadas
+ * Usa os templates reais do emailResponder.
  */
-export const handleEmailResponseGeneration: RequestHandler = async (req, res) => {
+export const handleEmailResponseGeneration: RequestHandler = async (
+  req,
+  res,
+) => {
   try {
     const {
       classification,
       extractedData,
       missingFields,
       senderEmail,
-      originalSubject
+      originalSubject,
     } = req.body;
 
     if (!classification || !senderEmail) {
       res.status(400).json({
         success: false,
-        error: "Classification and senderEmail are required",
+        error: "Os campos classification e senderEmail são obrigatórios",
       });
       return;
     }
 
-    // Here we would generate the response based on classification
-    // For now, we'll return the classification data for the email processor to handle
-    const responseData = {
-      type: classification,
-      senderEmail,
-      originalSubject,
-      extractedData,
-      missingFields,
-      shouldProcessDirectly: classification === "BOOKING_REQUEST" && missingFields.length === 0,
-    };
+    const safeMissingFields: string[] = Array.isArray(missingFields)
+      ? missingFields.map((f) => String(f))
+      : [];
+
+    let responseData;
+    if (
+      classification === "INFORMATION_REQUEST" ||
+      classification === "UNCLEAR"
+    ) {
+      responseData = await generateInformationRequestResponse(
+        senderEmail,
+        originalSubject,
+      );
+    } else if (classification === "BOOKING_REQUEST") {
+      responseData = await generateIncompleteBookingResponse(
+        senderEmail,
+        extractedData && typeof extractedData === "object" ? extractedData : {},
+        safeMissingFields,
+        originalSubject,
+      );
+    } else {
+      res.status(400).json({
+        success: false,
+        error:
+          "Classificação inválida. Use INFORMATION_REQUEST, BOOKING_REQUEST ou UNCLEAR.",
+      });
+      return;
+    }
 
     res.json({
       success: true,
@@ -434,7 +383,7 @@ export const handleEmailResponseGeneration: RequestHandler = async (req, res) =>
     console.error("Error generating email response:", error);
     res.status(500).json({
       success: false,
-      error: "Failed to generate email response",
+      error: "Não foi possível gerar a resposta do email",
     });
   }
 };

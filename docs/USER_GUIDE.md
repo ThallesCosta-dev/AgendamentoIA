@@ -17,7 +17,7 @@ Tudo isso através de uma conversa natural com um chatbot!
 ### Acessar a Aplicação
 
 1. Abra seu navegador
-2. Acesse: **http://localhost:5173** (desenvolvimento) ou o endereço da produção
+2. Acesse: **http://localhost:8080** (desenvolvimento) ou o endereço da produção
 3. Você verá a página inicial com o Assistente de Agendamento
 
 ### Interface do Chatbot
@@ -49,12 +49,12 @@ Tudo isso através de uma conversa natural com um chatbot!
 
 **Bot**: "Qual é seu email?"
 
-**Você**: Digite seu email da instituição
+**Você**: Digite seu email institucional
+- ✅ Válido: pesquisador@ioc.fiocruz.br
 - ✅ Válido: aluno@universidade.edu.br
-- ✅ Válido: professor@faculdade.edu.br
 - ❌ Inválido: joao@gmail.com
 
-⚠️ **Importante**: Apenas emails .edu.br são aceitos!
+⚠️ **Importante**: Apenas emails institucionais são aceitos! Por padrão, domínios `fiocruz.br` e `edu.br` (subdomínios inclusos). O administrador pode configurar outros domínios.
 
 ### Passo 3: Escolher Data
 
@@ -194,9 +194,9 @@ Após agendar, você recebe um ID:
 
 ## 🆘 Troubleshooting
 
-### "Email inválido. Use um email .edu.br"
+### "Email inválido. Use um email institucional"
 ❌ Problema: Você digitou um email pessoal
-✅ Solução: Use seu email da instituição (termina em .edu.br)
+✅ Solução: Use seu email da instituição (por padrão, domínios `fiocruz.br` ou `edu.br` — ex.: @ioc.fiocruz.br)
 
 ### "Data inválida. A data deve ser hoje ou no futuro"
 ❌ Problema: Tentou agendar para uma data passada
@@ -294,7 +294,7 @@ Encontrou um problema?
 ## 📋 Checklist Antes de Agendar
 
 - [ ] Tenho meu nome completo?
-- [ ] Tenho um email .edu.br válido?
+- [ ] Tenho um email institucional válido (ex.: fiocruz.br ou edu.br)?
 - [ ] Sei que dia e horário preciso?
 - [ ] Horário final é depois do horário inicial?
 - [ ] Data é hoje ou no futuro?
@@ -311,6 +311,6 @@ Após agendar:
 ---
 
 **Versão**: 1.0.0
-**Última atualização**: 2024
+**Última atualização**: 2026
 
 Boa defesa! 🎓

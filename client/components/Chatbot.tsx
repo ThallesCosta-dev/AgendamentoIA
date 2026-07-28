@@ -6,48 +6,63 @@ import { Send, MessageCircle, Loader } from "lucide-react";
 import { Room, Booking } from "@shared/api";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import {
+  DEFAULT_ALLOWED_EMAIL_DOMAINS,
+  getAppConfig,
+  isEmailDomainAllowed,
+} from "@/lib/config";
 
-// Analisa formatação do tipo markdown para mensagens do bot
-function parseMessageContent(content: string) {
+// Analisa formatação inline (**negrito** e *itálico*) de um trecho sem quebras de linha
+function parseInlineContent(text: string, keyPrefix: string) {
   const parts: (string | JSX.Element)[] = [];
+  const pattern = /\*\*(.+?)\*\*|\*(.+?)\*/g;
   let lastIndex = 0;
-
-  // Padrão para corresponder: **negrito**, *itálico*, e quebras de linha
-  const pattern = /\*\*(.+?)\*\*|\*(.+?)\*|(?<!\*)(\\n|\n)(?!\*)/g;
   let match;
 
-  while ((match = pattern.exec(content)) !== null) {
-    // Adiciona texto antes desta correspondência
+  while ((match = pattern.exec(text)) !== null) {
     if (match.index > lastIndex) {
-      parts.push(content.substring(lastIndex, match.index));
+      parts.push(text.substring(lastIndex, match.index));
     }
 
-    if (match[1]) {
+    if (match[1] !== undefined) {
       // Padrão **negrito**
       parts.push(
-        <strong key={`${lastIndex}-bold`} className="font-bold">
+        <strong key={`${keyPrefix}-bold-${match.index}`} className="font-bold">
           {match[1]}
         </strong>,
       );
-    } else if (match[2]) {
+    } else if (match[2] !== undefined) {
       // Padrão *itálico*
       parts.push(
-        <em key={`${lastIndex}-italic`} className="italic">
+        <em key={`${keyPrefix}-italic-${match.index}`} className="italic">
           {match[2]}
         </em>,
       );
-    } else if (match[3]) {
-      // Padrão quebra de linha
-      parts.push(<br key={`${lastIndex}-br`} />);
     }
 
     lastIndex = pattern.lastIndex;
   }
 
-  // Adiciona texto restante
-  if (lastIndex < content.length) {
-    parts.push(content.substring(lastIndex));
+  if (lastIndex < text.length) {
+    parts.push(text.substring(lastIndex));
   }
+
+  return parts;
+}
+
+// Analisa formatação do tipo markdown para mensagens do bot.
+// Divide por quebras de linha primeiro (sem lookbehind, compatível com Safari)
+// e aplica a formatação inline em cada linha.
+function parseMessageContent(content: string) {
+  const lines = content.split(/\\n|\n/);
+  const parts: (string | JSX.Element)[] = [];
+
+  lines.forEach((line, index) => {
+    if (index > 0) {
+      parts.push(<br key={`br-${index}`} />);
+    }
+    parts.push(...parseInlineContent(line, `line-${index}`));
+  });
 
   return parts.length === 0 ? content : parts;
 }
@@ -72,6 +87,111 @@ interface ExtractedData {
 
 type ConversationFlow = "booking" | "modify" | "cancel" | "none";
 
+// Remove acentos e converte para minúsculas, para comparações robustas
+const normalizeText = (text: string): string =>
+  text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+// Verifica se uma palavra inteira aparece no texto (já normalizado),
+// delimitada por início/fim, espaços ou pontuação
+const matchesWord = (normalizedText: string, word: string): boolean =>
+  new RegExp(`(^|[\\s!.,;:?()"'])${word}($|[\\s!.,;:?()"'])`).test(
+    normalizedText,
+  );
+
+interface RoomMatchResult {
+  room: Room | null;
+  ambiguous: Room[];
+}
+
+// Encontra a sala mencionada na mensagem:
+// 1) nome exato (sem diferenciar caixa/acentos);
+// 2) número inteiro citado na mensagem contra os números dos nomes das salas;
+// 3) substring única. Se ambíguo, retorna a lista de candidatas.
+const findRoomMatch = (input: string, rooms: Room[]): RoomMatchResult => {
+  const normInput = normalizeText(input).trim();
+
+  const exact = rooms.filter(
+    (r) => normalizeText(r.name).trim() === normInput,
+  );
+  if (exact.length === 1) return { room: exact[0], ambiguous: [] };
+  if (exact.length > 1) return { room: null, ambiguous: exact };
+
+  const inputNumbers = normInput.match(/\d+/g) || [];
+  if (inputNumbers.length > 0) {
+    const byNumber = rooms.filter((r) => {
+      const roomNumbers = r.name.match(/\d+/g) || [];
+      return inputNumbers.some((n) =>
+        roomNumbers.some((rn) => parseInt(rn, 10) === parseInt(n, 10)),
+      );
+    });
+    if (byNumber.length === 1) return { room: byNumber[0], ambiguous: [] };
+    if (byNumber.length > 1) return { room: null, ambiguous: byNumber };
+    // A mensagem cita um número que não corresponde a nenhuma sala
+    return { room: null, ambiguous: [] };
+  }
+
+  const bySubstring = rooms.filter((r) => {
+    const roomName = normalizeText(r.name).trim();
+    return (
+      normInput.includes(roomName) ||
+      (normInput.length >= 3 && roomName.includes(normInput))
+    );
+  });
+  if (bySubstring.length === 1) return { room: bySubstring[0], ambiguous: [] };
+  if (bySubstring.length > 1) return { room: null, ambiguous: bySubstring };
+
+  return { room: null, ambiguous: [] };
+};
+
+// Erro de API com status HTTP, para distinguir 403 (email de verificação
+// incorreto) de outros erros
+class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+// Frases de cortesia que não devem ser interpretadas como nome
+// (comparadas já normalizadas: minúsculas e sem acentos)
+const NAME_STOPLIST = new Set([
+  "obrigado",
+  "obrigada",
+  "valeu",
+  "ok",
+  "blz",
+  "beleza",
+  "perfeito",
+  "otimo",
+  "bom dia",
+  "boa tarde",
+  "boa noite",
+  "tchau",
+  "ate mais",
+  "legal",
+  "show",
+]);
+
+// Formato básico de email (a verificação de domínio fica em validateEmail)
+const EMAIL_FORMAT_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const EMPTY_FORM_DATA = {
+  name: "",
+  email: "",
+  date: "",
+  startTime: "",
+  endTime: "",
+  duration: "",
+  equipment: "",
+  selectedRoomId: "",
+};
+
 export default function Chatbot() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -80,19 +200,9 @@ export default function Chatbot() {
   const initializedRef = useRef(false);
 
   // Dados do formulário extraídos da conversa
-  const [formData, setFormData] = useState({
-    name: "",
-    email: "",
-    date: "",
-    startTime: "",
-    endTime: "",
-    duration: "",
-    equipment: "",
-    selectedRoomId: "",
-  });
+  const [formData, setFormData] = useState({ ...EMPTY_FORM_DATA });
 
   const [availableRooms, setAvailableRooms] = useState<Room[]>([]);
-  const [booking, setBooking] = useState<Booking | null>(null);
   const [conversationHistory, setConversationHistory] = useState<
     Array<{ role: "user" | "assistant"; content: string }>
   >([]);
@@ -100,12 +210,31 @@ export default function Chatbot() {
   const [currentBookingId, setCurrentBookingId] = useState<string>("");
   const [currentBooking, setCurrentBooking] = useState<Booking | null>(null);
   const [modificationField, setModificationField] = useState<string>("");
+  // Email informado pelo usuário para verificar a titularidade da reserva
+  // nos fluxos de modificação/cancelamento (exigido pelo servidor)
+  const [verificationEmail, setVerificationEmail] = useState<string>("");
+  const [allowedEmailDomains, setAllowedEmailDomains] = useState<string[]>(
+    DEFAULT_ALLOWED_EMAIL_DOMAINS,
+  );
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll para o final
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Carrega os domínios de e-mail permitidos (com cache e fallback)
+  useEffect(() => {
+    let active = true;
+    getAppConfig().then((config) => {
+      if (active) {
+        setAllowedEmailDomains(config.allowedEmailDomains);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Inicializa com saudação
   useEffect(() => {
@@ -131,20 +260,18 @@ export default function Chatbot() {
   }, []);
 
   const convertDateToISO = (dateStr: string): string => {
-    // Se j\u00e1 est\u00e1 no formato ISO (YYYY-MM-DD), return as is
+    // Se já está no formato ISO (YYYY-MM-DD), retorna como está
     if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
       return dateStr;
     }
 
-    // Convert DD-MM-YYYY to YYYY-MM-DD
-    if (/^\d{2}-\d{2}-\d{4}$/.test(dateStr)) {
-      const [day, month, year] = dateStr.split("-");
-      return `${year}-${month}-${day}`;
-    }
-
-    // Convert DD/MM/YYYY to YYYY-MM-DD (legacy support)
-    if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
-      const [day, month, year] = dateStr.split("/");
+    // Converte D/M/AAAA, DD-MM-AAAA, D/M/AA etc. para YYYY-MM-DD
+    // (dia e mês com 1 ou 2 dígitos; ano com 2 ou 4 dígitos)
+    const dmy = dateStr.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2}|\d{4})$/);
+    if (dmy) {
+      const day = dmy[1].padStart(2, "0");
+      const month = dmy[2].padStart(2, "0");
+      const year = dmy[3].length === 2 ? `20${dmy[3]}` : dmy[3];
       return `${year}-${month}-${day}`;
     }
 
@@ -171,30 +298,37 @@ export default function Chatbot() {
 
     // Padrão de nome - se começar com letra maiúscula e tiver 2+ palavras
     const nameMatch = text.match(
-      /(?:meu nome é|me chamo|sou) ([A-Z][a-záàâãéèêíïóôõöúçñ\s]+)/i,
+      /(?:meu nome é|me chamo|sou) ([A-Za-záàâãäéèêëíìîïóòôõöúùûüçñÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑ\s]+)/i,
     );
     if (nameMatch) {
       data.name = nameMatch[1].trim();
     } else if (!emailMatch) {
       // Tenta extrair as primeiras 2-3 palavras se parecerem um nome
       const nameWords = text.match(
-        /^([A-Z][a-záà��ãéèêíïóôõöúçñ]+(?:\s+[A-Z][a-záàâãéèêíïóôõöúçñ]+)?)/,
+        /^([A-ZÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑ][a-záàâãäéèêëíìîïóòôõöúùûüçñ]+(?:\s+[A-ZÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑ][a-záàâãäéèêëíìîïóòôõöúùûüçñ]+)?)/,
       );
-      if (nameWords && !text.toLowerCase().includes("agendar")) {
+      // Mensagens de cortesia ("Obrigado", "Bom dia" etc.) não são nomes
+      const normalizedWhole = normalizeText(text.trim())
+        .replace(/[!.,;:?]+$/, "")
+        .trim();
+      if (
+        nameWords &&
+        !text.toLowerCase().includes("agendar") &&
+        !NAME_STOPLIST.has(normalizedWhole)
+      ) {
         data.name = nameWords[1];
       }
     }
 
-    // Padrão de data (YYYY-MM-DD, DD-MM-YYYY, DD/MM/YYYY, ou formato português como "15 de fevereiro")
+    // Padrão de data (YYYY-MM-DD, D/M/AAAA, DD-MM-AA, ou formato português como "15 de fevereiro")
     const isoDateMatch = text.match(/(\d{4}-\d{2}-\d{2})/);
-    const dateDashMatch = text.match(/(\d{2}-\d{2}-\d{4})/);
-    const dateSlashMatch = text.match(/(\d{2}\/\d{2}\/\d{4})/);
+    const dmyDateMatch = text.match(
+      /(?:^|[^\d\/\-])(\d{1,2}[\/\-]\d{1,2}[\/\-](?:\d{4}|\d{2}))(?![\d\/\-])/,
+    );
     if (isoDateMatch) {
       data.date = isoDateMatch[1];
-    } else if (dateDashMatch) {
-      data.date = convertDateToISO(dateDashMatch[1]);
-    } else if (dateSlashMatch) {
-      data.date = convertDateToISO(dateSlashMatch[1]);
+    } else if (dmyDateMatch) {
+      data.date = convertDateToISO(dmyDateMatch[1]);
     } else {
       // Tentar formato de data em português
       const ptDateMatch = text.match(
@@ -218,8 +352,45 @@ export default function Chatbot() {
         };
         const month = months[ptDateMatch[2].toLowerCase()];
         if (month) {
-          const year = new Date().getFullYear();
+          // Sem ano informado: usa o ano atual, ou o próximo se a data já passou
+          const now = new Date();
+          let year = now.getFullYear();
+          const candidate = new Date(year, parseInt(month) - 1, parseInt(day));
+          const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          if (candidate < today) {
+            year += 1;
+          }
           data.date = `${year}-${month}-${day}`;
+        }
+      }
+
+      if (!data.date) {
+        // Formato curto dia/mês sem ano ("15/08"). Delimitado para não
+        // capturar horários ("10:30", "9:30-10:30") nem trechos de datas
+        // completas (que já teriam casado acima) ou números soltos.
+        const dmShortMatch = text.match(
+          /(?:^|[^\d\/\-:])(\d{1,2})[\/\-](\d{1,2})(?![\d\/\-:])/,
+        );
+        if (dmShortMatch) {
+          const day = parseInt(dmShortMatch[1], 10);
+          const month = parseInt(dmShortMatch[2], 10);
+          if (day >= 1 && day <= 31 && month >= 1 && month <= 12) {
+            // Sem ano informado: usa o ano atual, ou o próximo se a data já passou
+            const now = new Date();
+            let year = now.getFullYear();
+            const candidate = new Date(year, month - 1, day);
+            const today = new Date(
+              now.getFullYear(),
+              now.getMonth(),
+              now.getDate(),
+            );
+            if (candidate < today) {
+              year += 1;
+            }
+            data.date = `${year}-${String(month).padStart(2, "0")}-${String(
+              day,
+            ).padStart(2, "0")}`;
+          }
         }
       }
     }
@@ -277,15 +448,17 @@ export default function Chatbot() {
       data.duration = durationMatch[0];
     }
 
-    console.log("Extracted from text:", { text, data });
     return data;
   };
+
+  const formatAllowedDomains = (): string =>
+    allowedEmailDomains.map((domain) => `@${domain}`).join(", ");
 
   const validateEmail = (email: string): boolean => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) return false;
-    // Aceitar qualquer email de instituição educacional brasileira (domínio .edu.br)
-    return email.endsWith(".edu.br");
+    // Aceitar apenas e-mails dos domínios institucionais permitidos
+    return isEmailDomainAllowed(email, allowedEmailDomains);
   };
 
   const validateDate = (dateStr: string): boolean => {
@@ -340,11 +513,13 @@ export default function Chatbot() {
     return endTotalMinutes > startTotalMinutes;
   };
 
+  // Retorna a lista de salas disponíveis, ou null se a verificação falhou
+  // (erro de rede/servidor) — null NÃO significa "nenhuma sala disponível"
   const checkAvailability = async (
     date: string,
     startTime: string,
     endTime: string,
-  ) => {
+  ): Promise<Room[] | null> => {
     try {
       const response = await fetch("/api/bookings/check-availability", {
         method: "POST",
@@ -352,75 +527,77 @@ export default function Chatbot() {
         body: JSON.stringify({ date, startTime, endTime }),
       });
 
-      if (!response.ok) throw new Error("Failed to check availability");
+      if (!response.ok) {
+        throw new Error("Erro ao verificar disponibilidade");
+      }
       const data = await response.json();
       return data.availableRooms as Room[];
     } catch (error) {
-      console.error("Error checking availability:", error);
-      return [];
+      return null;
     }
   };
 
 
   const fetchBookingDetails = async (bookingId: string) => {
-    try {
-      const response = await fetch(`/api/ai/bookings/${bookingId}`);
-      if (!response.ok) {
-        throw new Error("Agendamento não encontrado");
-      }
-      const data = await response.json();
-      return data.booking as Booking;
-    } catch (error) {
-      throw error;
+    const response = await fetch(`/api/ai/bookings/${bookingId}`);
+    if (!response.ok) {
+      throw new Error("Agendamento não encontrado");
     }
+    const data = await response.json();
+    return data.booking as Booking;
   };
 
+  // O servidor exige clientEmail no corpo como fator de verificação
+  // (deve corresponder ao email armazenado na reserva; 403 se divergir).
+  // O email da reserva NÃO é mais um campo editável pelo chat.
   const modifyBooking = async (
     bookingId: string,
     updates: {
       clientName?: string;
-      clientEmail?: string;
       date?: string;
       startTime?: string;
       endTime?: string;
       roomId?: string;
     },
+    emailForVerification: string,
   ) => {
-    try {
-      const response = await fetch(`/api/ai/bookings/${bookingId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updates),
-      });
+    const response = await fetch(`/api/ai/bookings/${bookingId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...updates, clientEmail: emailForVerification }),
+    });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to modify booking");
-      }
-
-      const data = await response.json();
-      return data.booking as Booking;
-    } catch (error) {
-      throw error;
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+      throw new ApiError(
+        error?.error || "Erro ao modificar o agendamento",
+        response.status,
+      );
     }
+
+    const data = await response.json();
+    return data.booking as Booking;
   };
 
-  const cancelBooking = async (bookingId: string) => {
-    try {
-      const response = await fetch(`/api/ai/bookings/${bookingId}`, {
+  // O servidor exige ?email= como fator de verificação (403 se divergir)
+  const cancelBooking = async (bookingId: string, emailForVerification: string) => {
+    const response = await fetch(
+      `/api/ai/bookings/${bookingId}?email=${encodeURIComponent(emailForVerification)}`,
+      {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-      });
+      },
+    );
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to cancel booking");
-      }
-
-      return true;
-    } catch (error) {
-      throw error;
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+      throw new ApiError(
+        error?.error || "Erro ao cancelar o agendamento",
+        response.status,
+      );
     }
+
+    return true;
   };
 
   const addBotMessage = (content: string) => {
@@ -458,18 +635,24 @@ export default function Chatbot() {
 
     try {
       // Verificar se o usuário quer modificar ou cancelar o agendamento
-      const lowerInput = userInput.toLowerCase();
+      // (correspondência por palavra inteira para evitar falsos positivos)
+      const normalizedInput = normalizeText(userInput);
       const wantsModify =
-        lowerInput.includes("modificar") ||
-        lowerInput.includes("editar") ||
-        lowerInput.includes("change") ||
-        lowerInput.includes("alterar");
+        matchesWord(normalizedInput, "modificar") ||
+        matchesWord(normalizedInput, "editar") ||
+        matchesWord(normalizedInput, "alterar");
       const wantsCancel =
-        lowerInput.includes("cancelar") ||
-        lowerInput.includes("cancel") ||
-        lowerInput.includes("remover");
+        matchesWord(normalizedInput, "cancelar") ||
+        matchesWord(normalizedInput, "remover");
 
       if (wantsModify && currentFlow === "booking") {
+        // Abandona uma confirmação pendente ao trocar de fluxo
+        sessionStorage.removeItem("pendingBooking");
+        setFormData((prev) => ({ ...prev, selectedRoomId: "" }));
+        // Limpa a lista de salas do fluxo de agendamento para não interferir
+        // na extração de dados quando o usuário voltar a agendar
+        setAvailableRooms([]);
+        setVerificationEmail("");
         setCurrentFlow("modify");
         addBotMessage(
           "Para modificar um agendamento, preciso do ID da reserva. Qual é o ID? (Exemplo: #12345 ou 12345)",
@@ -479,6 +662,13 @@ export default function Chatbot() {
       }
 
       if (wantsCancel && currentFlow === "booking") {
+        // Abandona uma confirmação pendente ao trocar de fluxo
+        sessionStorage.removeItem("pendingBooking");
+        setFormData((prev) => ({ ...prev, selectedRoomId: "" }));
+        // Limpa a lista de salas do fluxo de agendamento para não interferir
+        // na extração de dados quando o usuário voltar a agendar
+        setAvailableRooms([]);
+        setVerificationEmail("");
         setCurrentFlow("cancel");
         addBotMessage(
           "Para cancelar um agendamento, preciso do ID da reserva. Qual é o ID? (Exemplo: #12345 ou 12345)",
@@ -501,17 +691,15 @@ export default function Chatbot() {
             const fetchedBooking = await fetchBookingDetails(bookingId);
             setCurrentBooking(fetchedBooking);
 
-            const bookingInfo = `📋 Dados do Agendamento #${fetchedBooking.id}:\n📍 Sala: ${fetchedBooking.roomName}\n📅 Data: ${new Date(fetchedBooking.date).toLocaleDateString("pt-BR")}\n⏰ Horário: ${fetchedBooking.startTime} - ${fetchedBooking.endTime}\n👤 Nome: ${fetchedBooking.clientName}\n📧 Email: ${fetchedBooking.clientEmail}`;
+            // O email retornado pelo servidor vem mascarado (ex.: th***@dominio)
+            const bookingInfo = `📋 Dados do Agendamento #${fetchedBooking.id}:\n📍 Sala: ${fetchedBooking.roomName}\n📅 Data: ${formatDateForDisplay(fetchedBooking.date)}\n⏰ Horário: ${fetchedBooking.startTime} - ${fetchedBooking.endTime}\n👤 Nome: ${fetchedBooking.clientName}\n📧 Email: ${fetchedBooking.clientEmail}`;
 
+            addBotMessage(
+              `${bookingInfo}\n\n🔒 Por segurança, informe o email usado na reserva:`,
+            );
+            setVerificationEmail("");
             if (currentFlow === "modify") {
-              addBotMessage(
-                `${bookingInfo}\n\nQuais dados deseja modificar?\n- Nome\n- Email\n- Data\n- Hora inicial\n- Hora final\n- Sala`,
-              );
               setModificationField("");
-            } else {
-              addBotMessage(
-                `${bookingInfo}\n\n⚠️ Tem certeza que deseja CANCELAR este agendamento? (Sim/Não)`,
-              );
             }
             setIsLoading(false);
             return;
@@ -522,6 +710,7 @@ export default function Chatbot() {
             setCurrentFlow("booking");
             setCurrentBookingId("");
             setCurrentBooking(null);
+            setVerificationEmail("");
             setIsLoading(false);
             return;
           }
@@ -534,33 +723,131 @@ export default function Chatbot() {
         }
       }
 
-      // Lidar com confirmação de cancelamento
-      if (currentFlow === "cancel" && currentBookingId && currentBooking) {
-        if (
-          lowerInput.includes("sim") ||
-          lowerInput.includes("yes") ||
-          lowerInput.includes("confirmar")
-        ) {
-          await cancelBooking(currentBookingId);
-          addBotMessage(
-            `✅ Agendamento #${currentBookingId} foi cancelado com sucesso!`,
-          );
+      // Coletar o email de verificação exigido pelo servidor antes de
+      // permitir modificação/cancelamento
+      if (
+        (currentFlow === "modify" || currentFlow === "cancel") &&
+        currentBookingId &&
+        currentBooking &&
+        !verificationEmail
+      ) {
+        // Rota de saída do fluxo (em "cancelar" no fluxo de cancelamento a
+        // palavra é ambígua, então lá apenas voltar/sair encerram)
+        const wantsExit =
+          matchesWord(normalizedInput, "voltar") ||
+          matchesWord(normalizedInput, "sair") ||
+          (currentFlow === "modify" && matchesWord(normalizedInput, "cancelar"));
+        if (wantsExit) {
           setCurrentFlow("booking");
           setCurrentBookingId("");
           setCurrentBooking(null);
+          setModificationField("");
+          setVerificationEmail("");
+          addBotMessage(
+            "Operação encerrada. Como posso ajudá-lo? (novo agendamento, modificar ou cancelar)",
+          );
+          setIsLoading(false);
+          return;
+        }
+
+        const emailMatch = userInput.match(/[\w\.-]+@[\w\.-]+\.\w+/);
+        const emailCandidate = emailMatch ? emailMatch[0] : userInput.trim();
+        if (!EMAIL_FORMAT_REGEX.test(emailCandidate)) {
+          addBotMessage(
+            "❌ Email em formato inválido. Por segurança, informe o email usado na reserva:",
+          );
+          setIsLoading(false);
+          return;
+        }
+
+        setVerificationEmail(emailCandidate);
+        if (currentFlow === "modify") {
+          addBotMessage(
+            "Quais dados deseja modificar?\n- Nome\n- Data\n- Hora inicial\n- Hora final\n- Sala\n\n(O email da reserva não pode ser alterado pelo chat.)",
+          );
+          setModificationField("");
+        } else {
+          addBotMessage(
+            "⚠️ Tem certeza que deseja CANCELAR este agendamento? (Sim/Não)",
+          );
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      // Lidar com confirmação de cancelamento (palavra inteira)
+      if (
+        currentFlow === "cancel" &&
+        currentBookingId &&
+        currentBooking &&
+        verificationEmail
+      ) {
+        if (
+          matchesWord(normalizedInput, "sim") ||
+          matchesWord(normalizedInput, "yes") ||
+          matchesWord(normalizedInput, "confirmar")
+        ) {
+          try {
+            await cancelBooking(currentBookingId, verificationEmail);
+          } catch (error) {
+            if (error instanceof ApiError && error.status === 403) {
+              // Email não confere com o da reserva: pedir novamente
+              setVerificationEmail("");
+              addBotMessage(
+                `❌ ${error.message}\n\n🔒 Por segurança, informe o email usado na reserva:`,
+              );
+            } else {
+              addBotMessage(
+                `❌ Erro ao cancelar: ${error instanceof Error ? error.message : "Erro desconhecido"}`,
+              );
+            }
+            setIsLoading(false);
+            return;
+          }
+          addBotMessage(
+            `✅ Agendamento #${currentBookingId} foi cancelado com sucesso!`,
+          );
+          // Mantém o histórico da IA em sincronia com o que aconteceu
+          setConversationHistory((prev) => [
+            ...prev,
+            { role: "user" as const, content: userInput },
+            {
+              role: "assistant" as const,
+              content: `Agendamento #${currentBookingId} cancelado com sucesso.`,
+            },
+          ]);
+          setCurrentFlow("booking");
+          setCurrentBookingId("");
+          setCurrentBooking(null);
+          setVerificationEmail("");
           setIsLoading(false);
           return;
         } else if (
-          lowerInput.includes("não") ||
-          lowerInput.includes("no") ||
-          lowerInput.includes("nao")
+          matchesWord(normalizedInput, "nao") ||
+          matchesWord(normalizedInput, "no")
         ) {
           addBotMessage(
             "Cancelamento abortado. Como posso ajudá-lo? (novo agendamento, modificar ou cancelar)",
           );
+          setConversationHistory((prev) => [
+            ...prev,
+            { role: "user" as const, content: userInput },
+            {
+              role: "assistant" as const,
+              content: `Cancelamento do agendamento #${currentBookingId} abortado pelo usuário.`,
+            },
+          ]);
           setCurrentFlow("booking");
           setCurrentBookingId("");
           setCurrentBooking(null);
+          setVerificationEmail("");
+          setIsLoading(false);
+          return;
+        } else {
+          // Não repassar ao LLM com um cancelamento pendente: reperguntar
+          addBotMessage(
+            "Deseja realmente cancelar este agendamento? Responda sim ou não.",
+          );
           setIsLoading(false);
           return;
         }
@@ -573,47 +860,69 @@ export default function Chatbot() {
         currentBooking &&
         !modificationField
       ) {
-        if (lowerInput.includes("nome")) {
+        if (
+          matchesWord(normalizedInput, "cancelar") ||
+          matchesWord(normalizedInput, "voltar") ||
+          matchesWord(normalizedInput, "sair")
+        ) {
+          setCurrentFlow("booking");
+          setCurrentBookingId("");
+          setCurrentBooking(null);
+          setModificationField("");
+          setVerificationEmail("");
+          addBotMessage(
+            "Modificação encerrada. Como posso ajudá-lo? (novo agendamento, modificar ou cancelar)",
+          );
+          setIsLoading(false);
+          return;
+        }
+        if (matchesWord(normalizedInput, "nome")) {
           setModificationField("clientName");
           addBotMessage("Qual é o novo nome?");
           setIsLoading(false);
           return;
-        } else if (lowerInput.includes("email")) {
-          setModificationField("clientEmail");
-          addBotMessage("Qual é o novo email?");
+        } else if (matchesWord(normalizedInput, "email")) {
+          // Alterar o email da reserva agora é uma operação administrativa
+          addBotMessage(
+            "❌ O email da reserva não pode ser alterado pelo chat. Entre em contato com a administração para isso.\n\nQuais outros dados deseja modificar?\n- Nome\n- Data\n- Hora inicial\n- Hora final\n- Sala",
+          );
           setIsLoading(false);
           return;
-        } else if (lowerInput.includes("data")) {
+        } else if (matchesWord(normalizedInput, "data")) {
           setModificationField("date");
           addBotMessage("Qual é a nova data? (YYYY-MM-DD ou DD/MM/YYYY)");
           setIsLoading(false);
           return;
         } else if (
-          lowerInput.includes("hora inicial") ||
-          lowerInput.includes("início") ||
-          lowerInput.includes("start time")
+          normalizedInput.includes("hora inicial") ||
+          matchesWord(normalizedInput, "inicio")
         ) {
           setModificationField("startTime");
           addBotMessage("Qual é a nova hora inicial? (HH:mm)");
           setIsLoading(false);
           return;
         } else if (
-          lowerInput.includes("hora final") ||
-          lowerInput.includes("fim") ||
-          lowerInput.includes("end time")
+          normalizedInput.includes("hora final") ||
+          matchesWord(normalizedInput, "fim")
         ) {
           setModificationField("endTime");
           addBotMessage("Qual é a nova hora final? (HH:mm)");
           setIsLoading(false);
           return;
-        } else if (lowerInput.includes("sala")) {
+        } else if (matchesWord(normalizedInput, "sala")) {
           setModificationField("roomId");
           const rooms = await checkAvailability(
             currentBooking.date,
             currentBooking.startTime,
             currentBooking.endTime,
           );
-          if (rooms.length > 0) {
+          if (rooms === null) {
+            // Falha na verificação — não é o mesmo que "nenhuma sala"
+            addBotMessage(
+              "❌ Erro ao verificar disponibilidade. Tente novamente.",
+            );
+            setModificationField("");
+          } else if (rooms.length > 0) {
             const roomsList = rooms.map((r) => `- ${r.name}`).join("\n");
             addBotMessage(
               `Salas disponíveis para essa data e hora:\n${roomsList}\n\nQual sala você prefere?`,
@@ -637,21 +946,40 @@ export default function Chatbot() {
         currentBooking &&
         modificationField
       ) {
+        // Rota de saída: sem isso, qualquer texto (inclusive "cancelar")
+        // seria consumido como o novo valor do campo
+        if (
+          matchesWord(normalizedInput, "cancelar") ||
+          matchesWord(normalizedInput, "voltar") ||
+          matchesWord(normalizedInput, "sair")
+        ) {
+          setCurrentFlow("booking");
+          setCurrentBookingId("");
+          setCurrentBooking(null);
+          setModificationField("");
+          setVerificationEmail("");
+          setAvailableRooms([]);
+          addBotMessage(
+            "Modificação encerrada sem alterações. Como posso ajudá-lo? (novo agendamento, modificar ou cancelar)",
+          );
+          setIsLoading(false);
+          return;
+        }
+
         try {
           let newValue = userInput;
           let fieldToUpdate: any = {};
 
           if (modificationField === "clientName") {
-            fieldToUpdate.clientName = newValue;
-          } else if (modificationField === "clientEmail") {
-            if (!validateEmail(newValue)) {
+            const trimmedName = newValue.trim();
+            if (!trimmedName) {
               addBotMessage(
-                "❌ Email inválido. Use um email institucional (.edu.br)",
+                "❌ Nome inválido. Por favor, informe o novo nome completo.",
               );
               setIsLoading(false);
               return;
             }
-            fieldToUpdate.clientEmail = newValue;
+            fieldToUpdate.clientName = trimmedName;
           } else if (modificationField === "date") {
             const convertedDate = convertDateToISO(newValue);
             if (!validateDate(convertedDate)) {
@@ -690,14 +1018,22 @@ export default function Chatbot() {
             }
             fieldToUpdate.endTime = newValue;
           } else if (modificationField === "roomId") {
-            const selectedRoom = availableRooms.find((r) =>
-              newValue.toLowerCase().includes(r.name.toLowerCase()),
+            const { room: selectedRoom, ambiguous } = findRoomMatch(
+              userInput,
+              availableRooms,
             );
             if (selectedRoom) {
               fieldToUpdate.roomId = selectedRoom.id;
+            } else if (ambiguous.length > 1) {
+              const options = ambiguous.map((r) => `- ${r.name}`).join("\n");
+              addBotMessage(
+                `Encontrei mais de uma sala parecida com a sua resposta. Qual delas você prefere?\n${options}`,
+              );
+              setIsLoading(false);
+              return;
             } else {
               addBotMessage(
-                "Sala não encontrada. Por favor, escolha uma sala válida.",
+                "Sala não encontrada. Por favor, escolha uma das salas listadas acima.",
               );
               setIsLoading(false);
               return;
@@ -707,21 +1043,46 @@ export default function Chatbot() {
           const updatedBooking = await modifyBooking(
             currentBookingId,
             fieldToUpdate,
+            verificationEmail,
           );
           addBotMessage(
-            `✅ Agendamento #${currentBookingId} modificado com sucesso!\n\n📋 Dados atualizados:\n📍 Sala: ${updatedBooking.roomName}\n�� Data: ${new Date(updatedBooking.date).toLocaleDateString("pt-BR")}\n⏰ Horário: ${updatedBooking.startTime} - ${updatedBooking.endTime}\n👤 Nome: ${updatedBooking.clientName}\n📧 Email: ${updatedBooking.clientEmail}`,
+            `✅ Agendamento #${currentBookingId} modificado com sucesso!\n\n📋 Dados atualizados:\n📍 Sala: ${updatedBooking.roomName}\n📅 Data: ${formatDateForDisplay(updatedBooking.date)}\n⏰ Horário: ${updatedBooking.startTime} - ${updatedBooking.endTime}\n👤 Nome: ${updatedBooking.clientName}\n📧 Email: ${updatedBooking.clientEmail}`,
           );
+          setConversationHistory((prev) => [
+            ...prev,
+            { role: "user" as const, content: userInput },
+            {
+              role: "assistant" as const,
+              content: `Agendamento #${currentBookingId} modificado com sucesso.`,
+            },
+          ]);
           setCurrentFlow("booking");
           setCurrentBookingId("");
           setCurrentBooking(null);
           setModificationField("");
+          setVerificationEmail("");
+          // Limpa a lista usada na troca de sala para não travar a extração
+          // de dados do próximo agendamento
+          setAvailableRooms([]);
           setIsLoading(false);
           return;
         } catch (error) {
+          if (error instanceof ApiError && error.status === 403) {
+            // Email não confere com o da reserva: pedir novamente
+            setVerificationEmail("");
+            setModificationField("");
+            setAvailableRooms([]);
+            addBotMessage(
+              `❌ ${error.message}\n\n🔒 Por segurança, informe o email usado na reserva:`,
+            );
+            setIsLoading(false);
+            return;
+          }
           addBotMessage(
             `❌ Erro ao modificar: ${error instanceof Error ? error.message : "Erro desconhecido"}`,
           );
           setModificationField("");
+          setAvailableRooms([]);
           setIsLoading(false);
           return;
         }
@@ -737,19 +1098,30 @@ export default function Chatbot() {
         extractedData.name = undefined;
       }
 
-      // Se já temos uma hora inicial e uma nova hora é extraída, usar como hora final
-      if (formData.startTime && !formData.endTime && extractedData.startTime) {
+      // Durante a seleção de sala, um número solto ("1", "101") é escolha de
+      // sala, não horário — só horários explícitos ("14:30", "10h") contam
+      if (availableRooms.length > 0 && /^\d{1,3}$/.test(userInput.trim())) {
+        extractedData.startTime = undefined;
+        extractedData.endTime = undefined;
+      }
+
+      // Se já temos uma hora inicial e apenas UMA nova hora é extraída, usar
+      // como hora final. Se a mensagem trouxe início E fim ("das 14h às 16h"),
+      // substituir ambos em vez de descartar o segundo horário.
+      if (
+        formData.startTime &&
+        !formData.endTime &&
+        extractedData.startTime &&
+        !extractedData.endTime
+      ) {
         extractedData.endTime = extractedData.startTime;
         extractedData.startTime = undefined;
       }
 
-      console.log("Extracted data:", extractedData);
-      console.log("Current formData:", formData);
-
       // Validar email se fornecido
       if (extractedData.email && !validateEmail(extractedData.email)) {
         addBotMessage(
-          `❌ E-mail inválido. Por favor, use seu e-mail institucional (.edu.br)`,
+          `❌ E-mail inválido. Por favor, use seu e-mail institucional (domínios aceitos: ${formatAllowedDomains()})`,
         );
         setIsLoading(false);
         return;
@@ -761,7 +1133,7 @@ export default function Chatbot() {
       // Validar data se fornecida
       if (extractedData.date && !validateDate(extractedDate)) {
         addBotMessage(
-          "❌ A data deve ser hoje ou no futuro. Por favor, use o formato DD-MM-YYYY (ex: 25-12-2025).",
+          "❌ A data deve ser válida e não pode estar no passado. Use o formato DD/MM/AAAA (ex: 25/12/2026).",
         );
         setIsLoading(false);
         return;
@@ -785,6 +1157,13 @@ export default function Chatbot() {
         return;
       }
 
+      // A lista de salas exibida deixa de valer se a data/horário mudou
+      const roomListStale = !!(
+        extractedData.date ||
+        extractedData.startTime ||
+        extractedData.endTime
+      );
+
       const updatedFormData = {
         ...formData,
         name: extractedData.name || formData.name,
@@ -792,9 +1171,10 @@ export default function Chatbot() {
         date: extractedDate,
         startTime: extractedData.startTime || formData.startTime,
         endTime: extractedData.endTime || formData.endTime,
+        // Sala escolhida para a data/horário antigos não vale mais; limpar
+        // aqui garante que a disponibilidade seja verificada de novo
+        selectedRoomId: roomListStale ? "" : formData.selectedRoomId,
       };
-
-      console.log("Updated formData:", updatedFormData);
 
       // Atualizar dados do formulário com informações extraídas
       if (
@@ -807,21 +1187,42 @@ export default function Chatbot() {
         setFormData(updatedFormData);
 
         // Redefinir salas disponíveis se data/hora mudou (para re-verificar disponibilidade)
-        if (extractedData.date || extractedData.startTime || extractedData.endTime) {
+        if (roomListStale) {
           setAvailableRooms([]);
+          sessionStorage.removeItem("pendingBooking");
         }
       }
 
       // PRIMEIRO: Verificar se o usuário está tentando selecionar uma sala (antes de verificar disponibilidade)
-      if (availableRooms.length > 0 && !updatedFormData.selectedRoomId) {
-        // Verificar se o usuário mencionou qualquer nome de sala
-        const mentionedRoomName = userInput.toLowerCase();
-        const roomSelection = availableRooms.find((r) =>
-          mentionedRoomName.includes(r.name.toLowerCase()),
+      if (
+        availableRooms.length > 0 &&
+        !updatedFormData.selectedRoomId &&
+        !roomListStale
+      ) {
+        const { room: roomSelection, ambiguous } = findRoomMatch(
+          userInput,
+          availableRooms,
         );
 
+        // Se houver mais de uma sala compatível, pedir para o usuário especificar
+        if (!roomSelection && ambiguous.length > 1) {
+          const options = ambiguous.map((r) => `- ${r.name}`).join("\n");
+          const ambiguousMessage = `Encontrei mais de uma sala parecida com a sua resposta. Qual delas você prefere?\n${options}`;
+          addBotMessage(ambiguousMessage);
+          setConversationHistory((prev) => [
+            ...prev,
+            { role: "user" as const, content: userInput },
+            { role: "assistant", content: ambiguousMessage },
+          ]);
+          setIsLoading(false);
+          return;
+        }
+
         // Se o usuário tentou selecionar uma sala mas não está na lista de salas disponíveis, mostrar erro
-        if (!roomSelection && mentionedRoomName.includes("sala")) {
+        if (
+          !roomSelection &&
+          (matchesWord(normalizedInput, "sala") || /\d/.test(normalizedInput))
+        ) {
           addBotMessage(
             `❌ A sala mencionada não está disponível para este horário. Por favor, escolha uma das salas listadas acima.`,
           );
@@ -838,7 +1239,6 @@ export default function Chatbot() {
         }
 
         if (roomSelection) {
-          console.log("Room selected:", roomSelection.name);
           const updatedDataWithRoom = {
             ...updatedFormData,
             selectedRoomId: roomSelection.id,
@@ -873,23 +1273,11 @@ export default function Chatbot() {
         updatedFormData.startTime &&
         updatedFormData.endTime;
 
-      console.log("Has all details:", {
-        hasAllDetails,
-        availableRoomsLength: availableRooms.length,
-        name: updatedFormData.name,
-        email: updatedFormData.email,
-        date: updatedFormData.date,
-        startTime: updatedFormData.startTime,
-        endTime: updatedFormData.endTime,
-      });
-
-      if (hasAllDetails && !updatedFormData.selectedRoomId && availableRooms.length === 0) {
+      if (hasAllDetails && !updatedFormData.selectedRoomId && (availableRooms.length === 0 || roomListStale)) {
         // Temos todos os detalhes e ainda não selecionamos uma sala - verificar disponibilidade
         const date = updatedFormData.date!;
         const startTime = updatedFormData.startTime!;
         const endTime = updatedFormData.endTime!;
-
-        console.log("✅ Checking availability for:", date, startTime, endTime);
 
         const endMinutes =
           parseInt(endTime.split(":")[0]) * 60 +
@@ -898,14 +1286,7 @@ export default function Chatbot() {
           parseInt(startTime.split(":")[0]) * 60 +
           parseInt(startTime.split(":")[1]);
 
-        console.log("Time comparison:", {
-          startMinutes,
-          endMinutes,
-          isValid: endMinutes > startMinutes,
-        });
-
         if (endMinutes <= startMinutes) {
-          console.log("Invalid time range: end time must be after start time");
           addBotMessage(
             "❌ A hora final deve ser depois da hora inicial. Por favor, verifique os horários.",
           );
@@ -914,14 +1295,22 @@ export default function Chatbot() {
         }
 
         try {
-          console.log("Calling checkAvailability API...");
           const rooms = await checkAvailability(date, startTime, endTime);
-          console.log("Available rooms:", rooms);
+
+          if (rooms === null) {
+            // Falha na verificação — não afirmar que não há salas
+            addBotMessage(
+              "❌ Erro ao verificar disponibilidade. Tente novamente.",
+            );
+            setIsLoading(false);
+            return;
+          }
+
           setAvailableRooms(rooms);
 
           if (rooms.length > 0) {
             const roomsList = rooms.map((r) => `- ${r.name}`).join("\n");
-            const roomsMessage = `✅ Salas disponíveis para ${date} de ${startTime} a ${endTime}:\n\n${roomsList}\n\nQual sala você prefere?`;
+            const roomsMessage = `✅ Salas disponíveis para ${formatDateForDisplay(date)} de ${startTime} a ${endTime}:\n\n${roomsList}\n\nQual sala você prefere?`;
             addBotMessage(roomsMessage);
             setConversationHistory((prev) => [
               ...prev,
@@ -947,7 +1336,6 @@ export default function Chatbot() {
             return;
           }
         } catch (error) {
-          console.error("Error checking availability:", error);
           addBotMessage(
             "❌ Erro ao verificar disponibilidade. Tente novamente.",
           );
@@ -957,83 +1345,118 @@ export default function Chatbot() {
       }
 
 
-      // Lidar com confirmação
-      if (
-        (userInput.toLowerCase().includes("sim") ||
-          userInput.toLowerCase().includes("yes")) &&
-        updatedFormData.selectedRoomId
-      ) {
-        if (
-          updatedFormData.name &&
-          updatedFormData.email &&
-          updatedFormData.date &&
-          updatedFormData.startTime &&
-          updatedFormData.endTime
-        ) {
-          // Usar os dados de agendamento pendentes armazenados para garantir que todos os campos estejam definidos
-          const pendingBooking = sessionStorage.getItem("pendingBooking");
-          if (pendingBooking) {
-            const bookingData = JSON.parse(pendingBooking);
-            setFormData(bookingData);
+      // Lidar com confirmação do agendamento — só quando o bot está de fato
+      // aguardando confirmação (sala já selecionada), com palavra inteira
+      const awaitingBookingConfirmation = !!updatedFormData.selectedRoomId;
+      const saidYes =
+        matchesWord(normalizedInput, "sim") ||
+        matchesWord(normalizedInput, "yes") ||
+        matchesWord(normalizedInput, "confirmar");
+      // Não tratar "no" (contração de "em + o", como em "sim, no horário
+      // combinado") como negativa; apenas "não"/"nao". E o "sim" é avaliado
+      // ANTES da negativa (como no fluxo de cancelamento).
+      const saidNo = matchesWord(normalizedInput, "nao");
 
-            // Criar agendamento com os dados confirmados
-            try {
-              setIsLoading(true);
-
-              const response = await fetch("/api/bookings", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  roomId: bookingData.selectedRoomId,
-                  clientName: bookingData.name,
-                  clientEmail: bookingData.email,
-                  date: bookingData.date,
-                  startTime: bookingData.startTime,
-                  endTime: bookingData.endTime,
-                }),
-              });
-
-              if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || "Failed to create booking");
-              }
-
-              const data = await response.json();
-              setBooking(data.booking);
-              sessionStorage.removeItem("pendingBooking");
-
-              // Formatar data sem problemas de fuso horário
-              const [year, month, day] = bookingData.date.split("-");
-              const formattedDate = `${day}/${month}/${year}`;
-              const successMessage = `✅ Perfeito! Sua defesa foi agendada com sucesso!\n\n📌 **ID da Reserva: #${data.booking.id}**\n\nDetalhes da Reserva:\n📍 Sala: ${data.booking.roomName}\n📅 Data: ${formattedDate}\n⏰ Horário: ${bookingData.startTime} - ${bookingData.endTime}\n📧 Confirmação enviada para: ${bookingData.email}\n\nGuarde este ID para futuras modificações ou cancelamentos!\n\nObrigado por usar nosso assistente!`;
-
-              addBotMessage(successMessage);
-              toast.success("Agendamento confirmado!");
-
-              // Redefinir dados do formulário para próximo agendamento
-              setFormData({
-                name: "",
-                email: "",
-                date: "",
-                startTime: "",
-                endTime: "",
-                duration: "",
-                equipment: "",
-                selectedRoomId: "",
-              });
-              setAvailableRooms([]);
-              setCurrentFlow("booking");
-            } catch (error) {
-              console.error("Error creating booking:", error);
-              toast.error(
-                error instanceof Error ? error.message : "Erro ao confirmar reserva",
-              );
-            } finally {
-              setIsLoading(false);
-            }
-          }
+      if (awaitingBookingConfirmation && saidYes) {
+        // Usar os dados de agendamento pendentes armazenados para garantir que todos os campos estejam definidos
+        const pendingBooking = sessionStorage.getItem("pendingBooking");
+        if (!pendingBooking) {
+          addBotMessage(
+            "❌ Não encontrei os dados da reserva para confirmar. Por favor, recomece o agendamento informando seu nome, e-mail, data e horário novamente.",
+          );
+          setFormData({ ...EMPTY_FORM_DATA });
+          setAvailableRooms([]);
+          setIsLoading(false);
           return;
         }
+
+        const bookingData = JSON.parse(pendingBooking);
+        setFormData(bookingData);
+
+        // Criar agendamento com os dados confirmados
+        try {
+          setIsLoading(true);
+
+          const response = await fetch("/api/bookings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              roomId: bookingData.selectedRoomId,
+              clientName: bookingData.name,
+              clientEmail: bookingData.email,
+              date: bookingData.date,
+              startTime: bookingData.startTime,
+              endTime: bookingData.endTime,
+            }),
+          });
+
+          if (!response.ok) {
+            const error = await response.json().catch(() => null);
+            throw new Error(error?.error || "Erro ao criar o agendamento");
+          }
+
+          const data = await response.json();
+          sessionStorage.removeItem("pendingBooking");
+
+          const bookingIdText = String(data.booking.id);
+
+          // Formatar data sem problemas de fuso horário
+          const [year, month, day] = bookingData.date.split("-");
+          const formattedDate = `${day}/${month}/${year}`;
+          const successMessage = `✅ Perfeito! Sua defesa foi agendada com sucesso!\n\n🎫 **ID da Reserva: #${bookingIdText}**\n(Anote ou copie este ID — ele é necessário para modificar ou cancelar a reserva.)\n\nDetalhes da Reserva:\n📍 Sala: ${data.booking.roomName}\n📅 Data: ${formattedDate}\n⏰ Horário: ${bookingData.startTime} - ${bookingData.endTime}\n📧 Confirmação enviada para: ${bookingData.email}\n\nObrigado por usar o SalaAgenda!`;
+
+          addBotMessage(successMessage);
+          // Mantém o histórico da IA em sincronia: a reserva foi concluída
+          setConversationHistory((prev) => [
+            ...prev,
+            { role: "user" as const, content: userInput },
+            {
+              role: "assistant" as const,
+              content: `Agendamento criado com sucesso — ID #${bookingIdText}.`,
+            },
+          ]);
+          toast.success(`Agendamento confirmado! ID da reserva: #${bookingIdText}`, {
+            duration: 10000,
+            action: {
+              label: "Copiar ID",
+              onClick: () => {
+                navigator.clipboard
+                  ?.writeText(bookingIdText)
+                  .then(() => toast.success("ID copiado!"))
+                  .catch(() => {});
+              },
+            },
+          });
+
+          // Redefinir dados do formulário para próximo agendamento
+          setFormData({ ...EMPTY_FORM_DATA });
+          setAvailableRooms([]);
+          setCurrentFlow("booking");
+        } catch (error) {
+          toast.error(
+            error instanceof Error ? error.message : "Erro ao confirmar reserva",
+          );
+        } finally {
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      if (awaitingBookingConfirmation && saidNo) {
+        // Fluxo abandonado: limpar a reserva pendente
+        sessionStorage.removeItem("pendingBooking");
+        setFormData({ ...updatedFormData, selectedRoomId: "" });
+        const abortMessage =
+          "Sem problemas! O agendamento não foi confirmado. Você pode escolher outra sala da lista acima ou informar uma nova data e horário.";
+        addBotMessage(abortMessage);
+        // Mantém o histórico da IA em sincronia: a confirmação foi abortada
+        setConversationHistory((prev) => [
+          ...prev,
+          { role: "user" as const, content: userInput },
+          { role: "assistant" as const, content: abortMessage },
+        ]);
+        setIsLoading(false);
+        return;
       }
 
       // Enviar mensagem para IA para conversa geral
@@ -1051,19 +1474,17 @@ export default function Chatbot() {
       });
 
       if (!response.ok) {
-        const errorData = await response
-          .json()
-          .catch(() => ({ error: "Unknown error" }));
-        const errorMsg = errorData.error || "Failed to get AI response";
-        console.error("Chat API error:", errorMsg);
-        throw new Error(errorMsg);
+        const errorData = await response.json().catch(() => null);
+        throw new Error(
+          errorData?.error || "Erro ao obter resposta do assistente",
+        );
       }
 
       const data = await response.json();
       const aiMessage = data.message;
 
       if (!aiMessage) {
-        throw new Error("Empty response from AI");
+        throw new Error("O assistente não retornou resposta. Tente novamente");
       }
 
       addBotMessage(aiMessage);
@@ -1072,7 +1493,6 @@ export default function Chatbot() {
         { role: "assistant", content: aiMessage },
       ]);
     } catch (error) {
-      console.error("Error:", error);
       const errorMessage =
         error instanceof Error ? error.message : "Erro ao processar mensagem";
       addBotMessage(`❌ Erro: ${errorMessage}. Por favor, tente novamente.`);
@@ -1100,7 +1520,12 @@ export default function Chatbot() {
 
       <Card className="flex-1 overflow-hidden flex flex-col bg-card border border-border">
         {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gradient-to-b from-card to-card/50">
+        <div
+          className="flex-1 overflow-y-auto p-6 space-y-4 bg-gradient-to-b from-card to-card/50"
+          role="log"
+          aria-live="polite"
+          aria-label="Mensagens da conversa"
+        >
           {messages.length === 0 ? (
             <div className="h-full flex items-center justify-center text-muted-foreground">
               Iniciando conversa...
@@ -1153,6 +1578,7 @@ export default function Chatbot() {
             <Input
               type="text"
               placeholder="Digite sua resposta..."
+              aria-label="Digite sua mensagem para o assistente"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               disabled={isLoading}
@@ -1162,6 +1588,7 @@ export default function Chatbot() {
             <Button
               type="submit"
               disabled={!input.trim() || isLoading}
+              aria-label="Enviar mensagem"
               className="rounded-full px-6 bg-primary hover:bg-primary/90 text-primary-foreground"
             >
               <Send className="h-4 w-4" />

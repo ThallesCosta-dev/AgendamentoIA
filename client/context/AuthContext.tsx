@@ -1,40 +1,79 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useCallback, useContext, useState } from "react";
+
+const TOKEN_STORAGE_KEY = "adminToken";
+
+export interface LoginResult {
+  success: boolean;
+  error?: string;
+}
 
 interface AuthContextType {
   isAuthenticated: boolean;
-  login: (username: string, password: string) => boolean;
+  token: string | null;
+  login: (username: string, password: string) => Promise<LoginResult>;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [token, setToken] = useState<string | null>(() => {
+    // Remove o antigo indicador inseguro de autenticação, se existir
+    localStorage.removeItem("adminAuth");
+    return sessionStorage.getItem(TOKEN_STORAGE_KEY);
+  });
 
-  // Verifica se o usuário estava anteriormente conectado
-  useEffect(() => {
-    const savedAuth = localStorage.getItem("adminAuth");
-    if (savedAuth === "true") {
-      setIsAuthenticated(true);
+  const login = useCallback(
+    async (username: string, password: string): Promise<LoginResult> => {
+      try {
+        const response = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        });
+
+        const data = await response.json().catch(() => null);
+
+        if (response.ok && data?.success && typeof data.token === "string") {
+          sessionStorage.setItem(TOKEN_STORAGE_KEY, data.token);
+          setToken(data.token);
+          return { success: true };
+        }
+
+        return {
+          success: false,
+          error:
+            data && typeof data.error === "string" && data.error.trim()
+              ? data.error
+              : "Usuário ou senha incorretos",
+        };
+      } catch {
+        return {
+          success: false,
+          error: "Não foi possível conectar ao servidor. Tente novamente.",
+        };
+      }
+    },
+    [],
+  );
+
+  const logout = useCallback(() => {
+    const currentToken = sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    if (currentToken) {
+      // Melhor esforço: invalida a sessão no servidor
+      fetch("/api/auth/logout", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${currentToken}` },
+      }).catch(() => {});
     }
+    sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+    setToken(null);
   }, []);
 
-  const login = (username: string, password: string): boolean => {
-    if (username === "admin" && password === "admin123") {
-      setIsAuthenticated(true);
-      localStorage.setItem("adminAuth", "true");
-      return true;
-    }
-    return false;
-  };
-
-  const logout = () => {
-    setIsAuthenticated(false);
-    localStorage.removeItem("adminAuth");
-  };
-
   return (
-    <AuthContext.Provider value={{ isAuthenticated, login, logout }}>
+    <AuthContext.Provider
+      value={{ isAuthenticated: !!token, token, login, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );

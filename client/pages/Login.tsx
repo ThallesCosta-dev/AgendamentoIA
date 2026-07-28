@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,26 +14,30 @@ export default function Login() {
   const navigate = useNavigate();
   const { login } = useAuth();
 
+  useEffect(() => {
+    document.title = "Login — SalaAgenda";
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!username.trim() || !password.trim()) {
       toast.error("Preencha todos os campos");
       return;
     }
 
     setIsLoading(true);
-
-    // Simular um pequeno atraso para UX
-    setTimeout(() => {
-      if (login(username, password)) {
+    try {
+      const result = await login(username, password);
+      if (result.success) {
         toast.success("Login realizado com sucesso!");
         navigate("/admin");
       } else {
-        toast.error("Usuário ou senha incorretos");
+        toast.error(result.error || "Usuário ou senha incorretos");
       }
+    } finally {
       setIsLoading(false);
-    }, 500);
+    }
   };
 
   return (
@@ -45,7 +49,7 @@ export default function Login() {
               <Lock className="h-8 w-8 text-primary" />
             </div>
           </div>
-          
+
           <h1 className="text-2xl font-bold text-foreground text-center mb-2">
             Painel de Admin
           </h1>
@@ -55,12 +59,17 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-foreground mb-2">
+              <label
+                htmlFor="login-username"
+                className="block text-sm font-medium text-foreground mb-2"
+              >
                 Usuário
               </label>
               <Input
+                id="login-username"
                 type="text"
                 placeholder="login"
+                autoComplete="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 disabled={isLoading}
@@ -69,12 +78,17 @@ export default function Login() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-foreground mb-2">
+              <label
+                htmlFor="login-password"
+                className="block text-sm font-medium text-foreground mb-2"
+              >
                 Senha
               </label>
               <Input
+                id="login-password"
                 type="password"
                 placeholder="••••••••"
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isLoading}

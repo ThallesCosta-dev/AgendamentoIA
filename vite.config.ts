@@ -10,8 +10,19 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8080,
     fs: {
-      allow: ["./client", "./shared"],
-      deny: [".env", ".env.*", "*.{crt,pem}", "**/.git/**", "server/**"],
+      allow: ["./", "./client", "./shared"],
+      // Padrões com "/" são comparados contra o caminho ABSOLUTO do arquivo
+      // sem prefixo automático "**/" — por isso "server/**" sozinho não
+      // casaria nada; é preciso "**/server/**". "data/**" protege o db.json
+      // (contém PII).
+      deny: [
+        ".env",
+        ".env.*",
+        "*.{crt,pem}",
+        "**/.git/**",
+        "**/server/**",
+        "**/data/**",
+      ],
     },
   },
   build: {
@@ -33,6 +44,12 @@ function expressPlugin(): Plugin {
     name: "express-plugin",
     apply: "serve", // Aplicar apenas durante o desenvolvimento (modo serve)
     async configureServer(server) {
+      // Não inicializar o app durante os testes (vitest) — os testes usam
+      // um diretório de dados temporário próprio e não devem escrever no repo
+      if (process.env.VITEST) {
+        return;
+      }
+
       // Inicializar banco de dados apenas uma vez
       if (!initialized) {
         try {

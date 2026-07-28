@@ -22,7 +22,7 @@ Este guia descreve como desenvolver, estender e manter a aplicação SalaAgenda.
 └─────────────────────────────────────────┘
                    ↓
 ┌─────────────────────────────────────────┐
-│      Banco de Dados (MySQL)             │
+│  Armazenamento em Arquivo (data/db.json)│
 │  ┌──────────────────────────────────┐  │
 │  │ Rooms | Bookings | Logs          │  │
 │  └──────────────────────────────────┘  │
@@ -64,13 +64,12 @@ salaagenda/
 │   │   ├── ai.ts                # Endpoints de IA
 │   │   ├── bookings.ts          # Endpoints de agendamentos
 │   │   ├── rooms.ts             # Endpoints de salas
-│   │   ├── chat.ts              # Integração com OpenRouter
-│   │   ├── demo.ts              # Rota demo
+│   │   ├── chat.ts              # Integração com Groq (LLM)
 │   │   └── index.ts             # Configuração de rotas
 │   ├── services/
 │   │   └── email.ts             # Serviço de envio de email
-│   ├── data.ts                  # Operações de banco de dados
-│   ├── db.ts                    # Conexão MySQL
+│   ├── data.ts                  # Camada de dados (API estável)
+│   ├── store.ts                 # Armazenamento JSON (data/db.json)
 │   ├── index.ts                 # Aplicação Express
 │   └── node-build.ts            # Entry point produção
 │
@@ -111,10 +110,16 @@ nano .env  # ou seu editor preferido
 npm run dev
 ```
 
-Isso inicia:
-- Frontend: http://localhost:5173
-- Backend: http://localhost:3000
-- Ambos com hot reload automático
+Isso inicia **tudo em uma única porta** — o Vite serve o SPA e monta o Express como middleware (não há porta separada de backend em desenvolvimento):
+
+- Aplicação + API: http://localhost:8080
+- Hot reload automático (frontend e backend)
+
+> **Sem banco de dados**: não há nada para instalar ou provisionar. O arquivo de dados (`data/db.json`) é criado automaticamente na primeira execução, com salas iniciais de exemplo. Para começar do zero, basta apagar o arquivo e reiniciar. O diretório é configurável via `DATA_DIR` (padrão: `./data`) e está no `.gitignore`.
+
+> Em produção (`npm run build` + `npm start`), o servidor Node roda na porta 3000 (configurável via `PORT`).
+
+> **Gerenciador de pacotes**: use **npm** (o lockfile oficial é o `package-lock.json`).
 
 ## 💡 Fluxo de Desenvolvimento
 
@@ -159,9 +164,9 @@ git push origin feature/sua-feature
 - Novas rotas em `server/routes/`
 - Novos serviços em `server/services/`
 
-#### Banco de Dados
-- Alterações em `server/data.ts`
-- Schema em `server/db.ts`
+#### Dados
+- Camada de dados (API estável usada pelas rotas): `server/data.ts`
+- Armazenamento JSON (leitura/escrita atômica de `data/db.json`): `server/store.ts`
 
 #### Tipos Compartilhados
 - Alterações em `shared/api.ts`
@@ -246,14 +251,9 @@ export interface CreateBookingRequest {
 }
 ```
 
-#### Passo 2: Atualizar Banco de Dados (server/db.ts)
+#### Passo 2: Armazenamento — nada a fazer
 
-```typescript
-// No schema de bookings, adicionar coluna
-await connection.execute(`
-  ALTER TABLE bookings ADD COLUMN equipment VARCHAR(255);
-`);
-```
+Não há schema nem migração: o campo novo passa a ser gravado em `data/db.json` assim que a camada de dados o incluir no objeto persistido. Registros antigos (sem o campo) continuam válidos.
 
 #### Passo 3: Atualizar Data Layer (server/data.ts)
 
@@ -261,16 +261,9 @@ await connection.execute(`
 export async function createBooking(
   booking: Omit<Booking, "id" | "createdAt">,
 ): Promise<Booking> {
-  const connection = await getConnection();
-  try {
-    const [result] = await connection.execute<ResultSetHeader>(
-      `INSERT INTO bookings (..., equipment) VALUES (..., ?)`,
-      [...values, booking.equipment],
-    );
-    // ... resto do código
-  } finally {
-    connection.release();
-  }
+  // Incluir booking.equipment no objeto persistido —
+  // o store (server/store.ts) grava o data/db.json
+  // de forma atômica (arquivo temporário + rename)
 }
 ```
 
@@ -327,8 +320,9 @@ npm run dev
 
 1. **Validação de Entrada**
 ```typescript
-// ✅ Validar dados do usuário
-if (!email.endsWith('.edu.br')) {
+// ✅ Validar dados do usuário contra a lista de domínios permitidos
+// (ALLOWED_EMAIL_DOMAINS, padrão "fiocruz.br,edu.br", subdomínios aceitos)
+if (!isAllowedEmailDomain(email)) {
   throw new Error('Email must be institutional');
 }
 
@@ -357,24 +351,27 @@ const hashedPassword = await bcrypt.hash(password, 10);
 const password = 'admin123';  // NUNCA FAZER!
 ```
 
-4. **SQL Injection Prevention**
+4. **Acesso a Dados**
 ```typescript
-// ✅ Usar prepared statements
-connection.execute('SELECT * FROM users WHERE id = ?', [userId]);
+// ✅ Sempre passar pela camada de dados (server/data.ts),
+// que valida e tipa os objetos antes de persistir
+const booking = await createBooking(validatedData);
 
-// ❌ String concatenation
-connection.execute(`SELECT * FROM users WHERE id = ${userId}`);
+// ❌ Nunca ler/escrever o data/db.json diretamente
+// nas rotas — isso contorna validação e escrita atômica
 ```
+
+> Nota: injeção de SQL não se aplica a este projeto — não há banco SQL; os dados são serializados como JSON pelo store.
 
 ## 🧪 Testando
 
 ### Testes Unitários
 
+Os testes usam **vitest** e vivem em arquivos `*.spec.ts` junto ao código testado. Eles rodam **sem nenhuma infraestrutura** — não há banco de dados nem serviços externos para subir antes:
+
 ```bash
 npm run test
 ```
-
-Arquivos de teste: `**/*.spec.ts`
 
 ```typescript
 // Exemplo: lib/utils.spec.ts
@@ -494,7 +491,7 @@ npm run typecheck
       "type": "chrome",
       "request": "launch",
       "name": "Launch Chrome",
-      "url": "http://localhost:5173",
+      "url": "http://localhost:8080",
       "webRoot": "${workspaceFolder}/client"
     }
   ]
@@ -509,7 +506,7 @@ console.log('debug info', variable);
 console.error('error:', error);
 
 // Backend (Terminal)
-console.log('Server started on port 3000');
+console.log(`Server started on port ${port}`);
 ```
 
 ## 📚 Documentação de Código
@@ -542,7 +539,6 @@ const maxRetries = 5;  // Máximo de tentativas antes de falhar
 - [React Docs](https://react.dev)
 - [TypeScript Handbook](https://www.typescriptlang.org/docs)
 - [Express Docs](https://expressjs.com)
-- [MySQL Docs](https://dev.mysql.com/doc)
 - [Tailwind CSS](https://tailwindcss.com)
 
 ## 📞 Contato e Suporte
@@ -555,6 +551,6 @@ Para dúvidas sobre desenvolvimento:
 ---
 
 **Versão**: 1.0.0
-**Última atualização**: 2024
+**Última atualização**: 2026
 
 Happy coding! 🎉

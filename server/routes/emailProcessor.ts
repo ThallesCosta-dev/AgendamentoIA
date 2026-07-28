@@ -27,7 +27,7 @@ export const handleEmailProcessorStatus: RequestHandler = async (_req, res) => {
     console.error("Error getting email processor status:", error);
     res.status(500).json({
       success: false,
-      error: "Failed to get email processor status",
+      error: "Não foi possível obter o status do processador de emails",
     });
   }
 };
@@ -43,7 +43,7 @@ export const handleEmailProcessorStart: RequestHandler = async (_req, res) => {
       if (!newProcessor) {
         res.status(400).json({
           success: false,
-          error: "Email processor not configured. Check environment variables.",
+          error: "Processador de emails não configurado. Verifique as variáveis de ambiente.",
         });
         return;
       }
@@ -52,9 +52,23 @@ export const handleEmailProcessorStart: RequestHandler = async (_req, res) => {
     await startEmailProcessor();
     const status = getEmailProcessorStatus();
 
+    // start() é um no-op quando IOC_EMAIL_PROCESSING_ENABLED !== "true" —
+    // nesse caso o processador continua parado e a resposta deve ser honesta.
+    if (!status.running) {
+      res.status(409).json({
+        success: false,
+        running: false,
+        error:
+          "O processador de emails está desabilitado por configuração. Defina IOC_EMAIL_PROCESSING_ENABLED=true para habilitá-lo.",
+        status,
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
     res.json({
       success: true,
-      message: "Email processor started successfully",
+      message: "Processador de emails iniciado com sucesso",
       status,
       timestamp: new Date().toISOString()
     });
@@ -62,7 +76,7 @@ export const handleEmailProcessorStart: RequestHandler = async (_req, res) => {
     console.error("Error starting email processor:", error);
     res.status(500).json({
       success: false,
-      error: "Failed to start email processor",
+      error: "Não foi possível iniciar o processador de emails",
     });
   }
 };
@@ -77,7 +91,7 @@ export const handleEmailProcessorStop: RequestHandler = async (_req, res) => {
 
     res.json({
       success: true,
-      message: "Email processor stopped successfully",
+      message: "Processador de emails parado com sucesso",
       status,
       timestamp: new Date().toISOString()
     });
@@ -85,7 +99,7 @@ export const handleEmailProcessorStop: RequestHandler = async (_req, res) => {
     console.error("Error stopping email processor:", error);
     res.status(500).json({
       success: false,
-      error: "Failed to stop email processor",
+      error: "Não foi possível parar o processador de emails",
     });
   }
 };
@@ -99,7 +113,7 @@ export const handleEmailProcessorManualProcess: RequestHandler = async (_req, re
     if (!processor) {
       res.status(400).json({
         success: false,
-        error: "Email processor not initialized",
+        error: "Processador de emails não inicializado",
       });
       return;
     }
@@ -108,25 +122,44 @@ export const handleEmailProcessorManualProcess: RequestHandler = async (_req, re
     if (!status.running) {
       res.status(400).json({
         success: false,
-        error: "Email processor is not running. Start it first.",
+        error: "O processador de emails não está em execução. Inicie-o primeiro.",
       });
       return;
     }
 
-    // Trigger manual processing
-    // Note: This would require modifying the EmailProcessor class to expose a public processEmails method
-    // For now, we'll just acknowledge the request
+    // Executa um ciclo real de processamento imediatamente
+    const result = await processor.processNow();
+
+    if (!result.ran) {
+      res.status(409).json({
+        success: false,
+        error:
+          "Já existe um ciclo de processamento em andamento. Tente novamente em instantes.",
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    if (!result.ok) {
+      res.status(502).json({
+        success: false,
+        error:
+          "O ciclo de processamento de emails foi executado, mas terminou com erro. Verifique os logs do servidor.",
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
     res.json({
       success: true,
-      message: "Manual email processing triggered",
-      note: "Processing will happen in the background according to the configured interval",
+      message: "Ciclo de processamento de emails executado com sucesso",
       timestamp: new Date().toISOString()
     });
   } catch (error) {
     console.error("Error triggering manual email processing:", error);
     res.status(500).json({
       success: false,
-      error: "Failed to trigger manual email processing",
+      error: "Não foi possível executar o processamento manual de emails",
     });
   }
 };
@@ -149,7 +182,7 @@ export const handleEmailProcessorStats: RequestHandler = async (req, res) => {
     console.error("Error getting email processing stats:", error);
     res.status(500).json({
       success: false,
-      error: "Failed to get email processing statistics",
+      error: "Não foi possível obter as estatísticas de processamento de emails",
     });
   }
 };
@@ -173,7 +206,7 @@ export const handleEmailProcessorLogs: RequestHandler = async (req, res) => {
     console.error("Error getting email logs:", error);
     res.status(500).json({
       success: false,
-      error: "Failed to get email logs",
+      error: "Não foi possível obter os logs de emails",
     });
   }
 };
@@ -188,7 +221,7 @@ export const handleEmailProcessorLogsByDate: RequestHandler = async (req, res) =
     if (!startDate || !endDate) {
       res.status(400).json({
         success: false,
-        error: "startDate and endDate are required",
+        error: "startDate e endDate são obrigatórios",
       });
       return;
     }
@@ -199,9 +232,15 @@ export const handleEmailProcessorLogsByDate: RequestHandler = async (req, res) =
     if (isNaN(start.getTime()) || isNaN(end.getTime())) {
       res.status(400).json({
         success: false,
-        error: "Invalid date format. Use ISO format (YYYY-MM-DD)",
+        error: "Formato de data inválido. Use o formato ISO (YYYY-MM-DD)",
       });
       return;
+    }
+
+    // endDate sem horário ("YYYY-MM-DD") é interpretado como meia-noite —
+    // estende para o fim do dia para incluir o dia final inteiro no intervalo.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(endDate))) {
+      end.setUTCHours(23, 59, 59, 999);
     }
 
     const logs = await getEmailLogsByDateRange(start, end);
@@ -220,7 +259,7 @@ export const handleEmailProcessorLogsByDate: RequestHandler = async (req, res) =
     console.error("Error getting email logs by date:", error);
     res.status(500).json({
       success: false,
-      error: "Failed to get email logs by date",
+      error: "Não foi possível obter os logs de emails por data",
     });
   }
 };
@@ -235,7 +274,7 @@ export const handleEmailProcessorTest: RequestHandler = async (req, res) => {
     if (!testEmail) {
       res.status(400).json({
         success: false,
-        error: "testEmail is required",
+        error: "O campo testEmail é obrigatório",
       });
       return;
     }
@@ -265,7 +304,7 @@ export const handleEmailProcessorTest: RequestHandler = async (req, res) => {
     console.error("Error testing email processing:", error);
     res.status(500).json({
       success: false,
-      error: "Failed to test email processing",
+      error: "Não foi possível testar o processamento de emails",
     });
   }
 };

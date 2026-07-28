@@ -1,10 +1,19 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Room, Booking } from "@shared/api";
-import { Trash2, Plus, Calendar, Users, Edit, X, Archive } from "lucide-react";
+import {
+  Trash2,
+  Plus,
+  Calendar,
+  Users,
+  Edit,
+  Archive,
+  Loader2,
+} from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -21,15 +30,35 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/context/AuthContext";
+import { authFetch, readErrorMessage } from "@/lib/authFetch";
+
+const ALL_MONTHS = "todos";
 
 export default function Admin() {
+  const { token, logout } = useAuth();
+  const navigate = useNavigate();
+
   const [rooms, setRooms] = useState<Room[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [newRoomName, setNewRoomName] = useState("");
   const [newRoomCapacity, setNewRoomCapacity] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedHistoryMonth, setSelectedHistoryMonth] = useState<string>("");
+  const [isLoadingRooms, setIsLoadingRooms] = useState(true);
+  const [isLoadingBookings, setIsLoadingBookings] = useState(true);
+  const [selectedHistoryMonth, setSelectedHistoryMonth] =
+    useState<string>(ALL_MONTHS);
 
   // Estado modal de edição de sala
   const [editRoomModalOpen, setEditRoomModalOpen] = useState(false);
@@ -47,32 +76,73 @@ export default function Admin() {
   const [editBookingEndTime, setEditBookingEndTime] = useState("");
   const [editBookingRoomId, setEditBookingRoomId] = useState("");
 
+  // Estado de confirmação de exclusão
+  const [roomToDelete, setRoomToDelete] = useState<Room | null>(null);
+  const [bookingToDelete, setBookingToDelete] = useState<Booking | null>(null);
+
+  useEffect(() => {
+    document.title = "Painel Administrativo — SalaAgenda";
+  }, []);
+
   useEffect(() => {
     fetchRooms();
     fetchBookings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleSessionExpired = () => {
+    toast.error("Sessão expirada, faça login novamente");
+    logout();
+    navigate("/login");
+  };
 
   const fetchRooms = async () => {
     try {
-      const response = await fetch("/api/rooms");
-      if (!response.ok) throw new Error("Failed to fetch rooms");
+      setIsLoadingRooms(true);
+      const response = await authFetch(token, "/api/rooms");
+      if (response.status === 401) {
+        handleSessionExpired();
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(
+          await readErrorMessage(response, "Erro ao carregar salas"),
+        );
+      }
       const data = await response.json();
       setRooms(data.rooms);
     } catch (error) {
-      console.error("Error fetching rooms:", error);
-      toast.error("Erro ao carregar salas");
+      toast.error(
+        error instanceof Error ? error.message : "Erro ao carregar salas",
+      );
+    } finally {
+      setIsLoadingRooms(false);
     }
   };
 
   const fetchBookings = async () => {
     try {
-      const response = await fetch("/api/bookings");
-      if (!response.ok) throw new Error("Failed to fetch bookings");
+      setIsLoadingBookings(true);
+      const response = await authFetch(token, "/api/bookings");
+      if (response.status === 401) {
+        handleSessionExpired();
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(
+          await readErrorMessage(response, "Erro ao carregar agendamentos"),
+        );
+      }
       const data = await response.json();
       setBookings(data.bookings);
     } catch (error) {
-      console.error("Error fetching bookings:", error);
-      toast.error("Erro ao carregar agendamentos");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Erro ao carregar agendamentos",
+      );
+    } finally {
+      setIsLoadingBookings(false);
     }
   };
 
@@ -85,7 +155,7 @@ export default function Admin() {
 
     try {
       setIsLoading(true);
-      const response = await fetch("/api/rooms", {
+      const response = await authFetch(token, "/api/rooms", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -94,15 +164,22 @@ export default function Admin() {
         }),
       });
 
-      if (!response.ok) throw new Error("Failed to create room");
+      if (response.status === 401) {
+        handleSessionExpired();
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, "Erro ao criar sala"));
+      }
       const newRoom = await response.json();
       setRooms((prev) => [...prev, newRoom]);
       setNewRoomName("");
       setNewRoomCapacity("");
       toast.success("Sala criada com sucesso!");
     } catch (error) {
-      console.error("Error creating room:", error);
-      toast.error("Erro ao criar sala");
+      toast.error(
+        error instanceof Error ? error.message : "Erro ao criar sala",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -123,7 +200,7 @@ export default function Admin() {
 
     try {
       setIsLoading(true);
-      const response = await fetch(`/api/rooms/${editingRoom.id}`, {
+      const response = await authFetch(token, `/api/rooms/${editingRoom.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -132,7 +209,15 @@ export default function Admin() {
         }),
       });
 
-      if (!response.ok) throw new Error("Failed to update room");
+      if (response.status === 401) {
+        handleSessionExpired();
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(
+          await readErrorMessage(response, "Erro ao atualizar sala"),
+        );
+      }
       const updatedRoom = await response.json();
       setRooms((prev) =>
         prev.map((r) => (r.id === editingRoom.id ? updatedRoom : r)),
@@ -141,27 +226,35 @@ export default function Admin() {
       setEditingRoom(null);
       toast.success("Sala atualizada com sucesso!");
     } catch (error) {
-      console.error("Error updating room:", error);
-      toast.error("Erro ao atualizar sala");
+      toast.error(
+        error instanceof Error ? error.message : "Erro ao atualizar sala",
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleDeleteRoom = async (roomId: string) => {
-    if (!confirm("Tem certeza que deseja deletar esta sala?")) return;
-
     try {
-      const response = await fetch(`/api/rooms/${roomId}`, {
+      const response = await authFetch(token, `/api/rooms/${roomId}`, {
         method: "DELETE",
       });
 
-      if (!response.ok) throw new Error("Failed to delete room");
+      if (response.status === 401) {
+        handleSessionExpired();
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(
+          await readErrorMessage(response, "Erro ao excluir sala"),
+        );
+      }
       setRooms((prev) => prev.filter((r) => r.id !== roomId));
-      toast.success("Sala deletada com sucesso!");
+      toast.success("Sala excluída com sucesso!");
     } catch (error) {
-      console.error("Error deleting room:", error);
-      toast.error("Erro ao deletar sala");
+      toast.error(
+        error instanceof Error ? error.message : "Erro ao excluir sala",
+      );
     }
   };
 
@@ -243,7 +336,9 @@ export default function Admin() {
 
     // Validar data
     if (!validateDate(editBookingDate)) {
-      toast.error("Data inválida. A data deve ser hoje ou no futuro (formato: YYYY-MM-DD)");
+      toast.error(
+        "Data inválida. A data deve ser hoje ou no futuro (formato: YYYY-MM-DD)",
+      );
       return;
     }
 
@@ -266,49 +361,70 @@ export default function Admin() {
 
     try {
       setIsLoading(true);
-      const response = await fetch(`/api/bookings/${editingBooking.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientName: editBookingName,
-          clientEmail: editBookingEmail,
-          date: editBookingDate,
-          startTime: editBookingStartTime,
-          endTime: editBookingEndTime,
-          roomId: editBookingRoomId,
-        }),
-      });
-
-      if (!response.ok) throw new Error("Failed to update booking");
-      const updatedBooking = await response.json();
-      setBookings((prev) =>
-        prev.map((b) => (b.id === editingBooking.id ? updatedBooking : b)),
+      const response = await authFetch(
+        token,
+        `/api/bookings/${editingBooking.id}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            clientName: editBookingName,
+            clientEmail: editBookingEmail,
+            date: editBookingDate,
+            startTime: editBookingStartTime,
+            endTime: editBookingEndTime,
+            roomId: editBookingRoomId,
+          }),
+        },
       );
+
+      if (response.status === 401) {
+        handleSessionExpired();
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(
+          await readErrorMessage(response, "Erro ao atualizar agendamento"),
+        );
+      }
+      // Recarrega a lista para refletir os dados atualizados pelo servidor
+      // (ex.: nome da sala)
+      await fetchBookings();
       setEditBookingModalOpen(false);
       setEditingBooking(null);
       toast.success("Agendamento atualizado com sucesso!");
     } catch (error) {
-      console.error("Error updating booking:", error);
-      toast.error("Erro ao atualizar agendamento");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Erro ao atualizar agendamento",
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleDeleteBooking = async (bookingId: string) => {
-    if (!confirm("Tem certeza que deseja deletar este agendamento?")) return;
-
     try {
-      const response = await fetch(`/api/bookings/${bookingId}`, {
+      const response = await authFetch(token, `/api/bookings/${bookingId}`, {
         method: "DELETE",
       });
 
-      if (!response.ok) throw new Error("Failed to delete booking");
+      if (response.status === 401) {
+        handleSessionExpired();
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(
+          await readErrorMessage(response, "Erro ao excluir agendamento"),
+        );
+      }
       setBookings((prev) => prev.filter((b) => b.id !== bookingId));
-      toast.success("Agendamento deletado com sucesso!");
+      toast.success("Agendamento excluído com sucesso!");
     } catch (error) {
-      console.error("Error deleting booking:", error);
-      toast.error("Erro ao deletar agendamento");
+      toast.error(
+        error instanceof Error ? error.message : "Erro ao excluir agendamento",
+      );
     }
   };
 
@@ -349,7 +465,7 @@ export default function Admin() {
   };
 
   const getFilteredHistoryBookings = () => {
-    if (!selectedHistoryMonth) {
+    if (selectedHistoryMonth === ALL_MONTHS) {
       return [...pastBookings].sort(
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
       );
@@ -372,6 +488,15 @@ export default function Admin() {
       month: "long",
     });
   };
+
+  const renderLoadingCard = (message: string) => (
+    <Card className="p-8 text-center border border-border">
+      <div className="flex items-center justify-center gap-2 text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        <p>{message}</p>
+      </div>
+    </Card>
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 p-4 md:p-8">
@@ -412,6 +537,7 @@ export default function Admin() {
                   <Input
                     type="text"
                     placeholder="Nome da sala (ex: Sala 101)"
+                    aria-label="Nome da sala"
                     value={newRoomName}
                     onChange={(e) => setNewRoomName(e.target.value)}
                     className="border-border focus:border-primary focus:ring-primary"
@@ -419,6 +545,7 @@ export default function Admin() {
                   <Input
                     type="number"
                     placeholder="Capacidade"
+                    aria-label="Capacidade da sala"
                     value={newRoomCapacity}
                     onChange={(e) => setNewRoomCapacity(e.target.value)}
                     className="border-border focus:border-primary focus:ring-primary"
@@ -428,14 +555,22 @@ export default function Admin() {
                     disabled={isLoading}
                     className="bg-primary hover:bg-primary/90 text-primary-foreground w-full sm:w-auto"
                   >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Adicionar Sala
+                    {isLoading ? (
+                      "Salvando..."
+                    ) : (
+                      <>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Adicionar Sala
+                      </>
+                    )}
                   </Button>
                 </div>
               </form>
             </Card>
 
-            {rooms.length === 0 ? (
+            {isLoadingRooms ? (
+              renderLoadingCard("Carregando salas...")
+            ) : rooms.length === 0 ? (
               <Card className="p-8 text-center border border-border">
                 <p className="text-muted-foreground">
                   Nenhuma sala cadastrada ainda.
@@ -462,6 +597,7 @@ export default function Admin() {
                           variant="ghost"
                           size="sm"
                           onClick={() => openEditRoomModal(room)}
+                          aria-label={`Editar sala ${room.name}`}
                           className="text-primary hover:text-primary/80 hover:bg-primary/10"
                         >
                           <Edit className="h-4 w-4" />
@@ -469,7 +605,8 @@ export default function Admin() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDeleteRoom(room.id)}
+                          onClick={() => setRoomToDelete(room)}
+                          aria-label={`Excluir sala ${room.name}`}
                           className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -484,7 +621,9 @@ export default function Admin() {
 
           {/* Bookings Tab */}
           <TabsContent value="bookings" className="space-y-6">
-            {sortedBookings.length === 0 ? (
+            {isLoadingBookings ? (
+              renderLoadingCard("Carregando agendamentos...")
+            ) : sortedBookings.length === 0 ? (
               <Card className="p-8 text-center border border-border">
                 <p className="text-muted-foreground">
                   Nenhum agendamento ativo.
@@ -533,6 +672,7 @@ export default function Admin() {
                           variant="ghost"
                           size="sm"
                           onClick={() => openEditBookingModal(booking)}
+                          aria-label={`Editar agendamento ${booking.id}`}
                           className="text-primary hover:text-primary/80 hover:bg-primary/10"
                         >
                           <Edit className="h-4 w-4" />
@@ -540,7 +680,8 @@ export default function Admin() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDeleteBooking(booking.id)}
+                          onClick={() => setBookingToDelete(booking)}
+                          aria-label={`Excluir agendamento ${booking.id}`}
                           className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -555,7 +696,9 @@ export default function Admin() {
 
           {/* History Tab */}
           <TabsContent value="history" className="space-y-6">
-            {pastBookings.length === 0 ? (
+            {isLoadingBookings ? (
+              renderLoadingCard("Carregando histórico...")
+            ) : pastBookings.length === 0 ? (
               <Card className="p-8 text-center border border-border">
                 <p className="text-muted-foreground">
                   Nenhum agendamento histórico ainda.
@@ -565,15 +708,26 @@ export default function Admin() {
               <>
                 <Card className="p-4 border border-border">
                   <div className="flex items-center gap-4">
-                    <label className="text-sm font-medium text-foreground">
+                    <label
+                      htmlFor="history-month-filter"
+                      className="text-sm font-medium text-foreground"
+                    >
                       Filtrar por mês:
                     </label>
-                    <Select value={selectedHistoryMonth} onValueChange={setSelectedHistoryMonth}>
-                      <SelectTrigger className="w-full sm:w-64 border-border focus:border-primary focus:ring-primary">
+                    <Select
+                      value={selectedHistoryMonth}
+                      onValueChange={setSelectedHistoryMonth}
+                    >
+                      <SelectTrigger
+                        id="history-month-filter"
+                        className="w-full sm:w-64 border-border focus:border-primary focus:ring-primary"
+                      >
                         <SelectValue placeholder="Todos os meses" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Todos os meses</SelectItem>
+                        <SelectItem value={ALL_MONTHS}>
+                          Todos os meses
+                        </SelectItem>
                         {getMonthsList().map((monthYear) => (
                           <SelectItem key={monthYear} value={monthYear}>
                             {getMonthLabel(monthYear)}
@@ -624,7 +778,9 @@ export default function Admin() {
                               </p>
                               <p className="text-xs text-muted-foreground mt-1">
                                 Criado em:{" "}
-                                {new Date(booking.createdAt).toLocaleString("pt-BR")}
+                                {new Date(booking.createdAt).toLocaleString(
+                                  "pt-BR",
+                                )}
                               </p>
                             </div>
                           </div>
@@ -632,7 +788,8 @@ export default function Admin() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleDeleteBooking(booking.id)}
+                              onClick={() => setBookingToDelete(booking)}
+                              aria-label={`Excluir agendamento ${booking.id}`}
                               className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -695,7 +852,7 @@ export default function Admin() {
               disabled={isLoading}
               className="bg-primary hover:bg-primary/90"
             >
-              Atualizar
+              {isLoading ? "Atualizando..." : "Atualizar"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -798,11 +955,79 @@ export default function Admin() {
               disabled={isLoading}
               className="bg-primary hover:bg-primary/90"
             >
-              Atualizar
+              {isLoading ? "Atualizando..." : "Atualizar"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Confirmação de exclusão de sala */}
+      <AlertDialog
+        open={!!roomToDelete}
+        onOpenChange={(open) => {
+          if (!open) setRoomToDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir sala</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir a sala{" "}
+              {roomToDelete ? `"${roomToDelete.name}"` : "selecionada"}? Esta
+              ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (roomToDelete) {
+                  handleDeleteRoom(roomToDelete.id);
+                }
+                setRoomToDelete(null);
+              }}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirmação de exclusão de agendamento */}
+      <AlertDialog
+        open={!!bookingToDelete}
+        onOpenChange={(open) => {
+          if (!open) setBookingToDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir agendamento</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o agendamento{" "}
+              {bookingToDelete
+                ? `#${bookingToDelete.id} (${bookingToDelete.roomName})`
+                : "selecionado"}
+              ? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (bookingToDelete) {
+                  handleDeleteBooking(bookingToDelete.id);
+                }
+                setBookingToDelete(null);
+              }}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

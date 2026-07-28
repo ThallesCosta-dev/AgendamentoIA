@@ -1,4 +1,7 @@
-import { validateInstitutionalEmail } from "../data";
+import {
+  validateInstitutionalEmail,
+  getAllowedEmailDomains,
+} from "../utils/validation";
 import { createEmailLogger } from "../utils/emailLogger";
 
 const logger = createEmailLogger("EmailClassifier");
@@ -26,8 +29,10 @@ export function extractDataFromText(text: string): ExtractedBookingData {
   // Email pattern - more comprehensive
   const emailMatch = text.match(/[\w\.-]+@[\w\.-]+\.\w+/g);
   if (emailMatch) {
-    // Find institutional email (.edu.br)
-    const institutionalEmail = emailMatch.find(email => email.endsWith(".edu.br"));
+    // Encontra o primeiro email pertencente a um domínio institucional aceito
+    const institutionalEmail = emailMatch.find((email) =>
+      validateInstitutionalEmail(email),
+    );
     if (institutionalEmail) {
       data.clientEmail = institutionalEmail;
     }
@@ -140,7 +145,6 @@ export function extractDataFromText(text: string): ExtractedBookingData {
     if (data.roomName) break;
   }
 
-  logger.debug("Extracted data from text", { text, extractedData: data });
   return data;
 }
 
@@ -151,14 +155,16 @@ function convertDateToISO(dateStr: string): string {
   }
 
   // Convert DD/MM/YYYY or DD-MM-YYYY
+  // (split em qualquer separador — replace("-", "/") só trocava o PRIMEIRO
+  // traço e mutilava datas como "15-02-2026")
   if (/^\d{2}[\/-]\d{2}[\/-]\d{4}$/.test(dateStr)) {
-    const [day, month, year] = dateStr.replace("-", "/").split("/");
+    const [day, month, year] = dateStr.split(/[\/-]/);
     return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
   }
 
   // Convert DD/MM or DD-MM (assume current year)
   if (/^\d{2}[\/-]\d{2}$/.test(dateStr)) {
-    const [day, month] = dateStr.replace("-", "/").split("/");
+    const [day, month] = dateStr.split(/[\/-]/);
     const year = new Date().getFullYear();
     return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
   }
@@ -219,13 +225,18 @@ function isValidDate(dateStr: string): boolean {
 }
 
 function isDateFuture(dateStr: string): boolean {
+  // Compara apenas a data, no fuso horário LOCAL (evita o bug de UTC
+  // em que "YYYY-MM-DD" é interpretado como meia-noite UTC).
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setHours(0, 0, 0, 0);
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const date = new Date(dateStr);
-  date.setHours(0, 0, 0, 0);
-
-  return date >= today;
+  return date.getTime() >= today.getTime();
 }
 
 export function classifyEmail(emailContent: string, subject: string = "", senderEmail: string = ""): EmailClassificationResult {
@@ -276,7 +287,10 @@ export function classifyEmail(emailContent: string, subject: string = "", sender
 
     // Identify missing fields for booking requests
     if (!hasName) missingFields.push("Nome completo");
-    if (!hasEmail) missingFields.push("Email institucional (.edu.br)");
+    if (!hasEmail)
+      missingFields.push(
+        `Email institucional (domínios aceitos: ${getAllowedEmailDomains().join(", ")})`,
+      );
     if (!hasDate) missingFields.push("Data da reserva");
     if (!hasTime) missingFields.push("Horário (início e término)");
     if (!extractedData.roomName) missingFields.push("Nome da sala");

@@ -27,17 +27,17 @@ Este documento descreve a arquitetura técnica e decisões de design da aplicaç
 │  │               Route Layer                           ││
 │  │  GET /api/rooms      POST /api/bookings             ││
 │  │  PUT /api/rooms/:id  DELETE /api/bookings/:id       ││
-│  │  POST /api/chat      GET /api/ai/rooms              ││
+│  │  POST /api/chat      GET /api/ai/bookings/:id       ││
 │  └─────────────────────────────────────────────────────┘│
 │                        ↓                                │
 │  ┌─────────────────────────────────────────────────────┐│
 │  │              Service Layer                          ││
 │  │  • Email Service     • Validation                    ││
-│  │  • Data Access Objs  • OpenRouter Integration       ││
+│  │  • Data Access Objs  • Groq Integration             ││
 │  └─────────────────────────────────────────────────────┘│
 │                        ↓                                │
 │  ┌────────────��────────────────────────────────────────┐│
-│  │           Data Access Layer (MySQL)                 ││
+│  │        Data Access Layer (server/data.ts)           ││
 │  │  getRooms()          createBooking()                ││
 │  │  getBookings()       updateBooking()                ││
 │  │  bookingExists()     deleteBooking()                ││
@@ -45,22 +45,18 @@ Este documento descreve a arquitetura técnica e decisões de design da aplicaç
 └─────────────────────────────────────────────────────────┘
                         ↓↑
 ┌─────────────────────────────────────────────────────────┐
-│              BANCO DE DADOS (MySQL 8.0+)               │
+│        ARMAZENAMENTO EM ARQUIVO (data/db.json)          │
 │                                                          │
-│  ┌──────────────┐  ┌──────────────────────────────────┐│
-│  │ rooms        │  │ bookings                         ││
-│  ���──────────────┤  ├──────────────────────────────────┤│
-│  │ id           │  │ id                               ││
-│  │ name         │  │ room_id (FK)                     ││
-│  │ capacity     │  │ room_name                        ││
-│  │ created_at   │  │ client_name                      ││
-│  └──────────────┘  │ client_email                     ││
-│                    │ date                             ││
-│                    │ start_time                       ││
-│                    │ end_time                         ││
-│                    │ created_at                       ││
-│                    └──────────────────────────────────┘│
-└────────────────────────��────────────────────────────────┘
+│  Coleções (arrays JSON) com IDs inteiros sequenciais:   │
+│   • rooms     — salas (id, name, capacity, createdAt)   │
+│   • bookings  — agendamentos (id, roomId, roomName,     │
+│                 clientName, clientEmail, date,          │
+│                 startTime, endTime, createdAt)          │
+│   • logs de email do processador IMAP                   │
+│                                                          │
+│  Leituras servidas da memória                           │
+│  Escritas atômicas (arquivo temporário + rename)        │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ## 📁 Componentes Principais
@@ -180,12 +176,12 @@ server/
 │   ├── ai.ts        # Operações diretas (7 endpoints)
 │   ├── bookings.ts  # Agendamentos (6 endpoints)
 │   ├── rooms.ts     # Salas (5 endpoints)
-│   ├── chat.ts      # Integração OpenRouter
+│   ├── chat.ts      # Integração Groq
 │   └── demo.ts      # Teste
 ├── services/         # Lógica de negócio
 │   └── email.ts     # Envio de confirmações
 ├── data.ts          # Data Access Layer (14 funções)
-├── db.ts            # Conexão MySQL
+├── store.ts         # Armazenamento JSON (data/db.json)
 └── index.ts         # Configuração Express
 ```
 
@@ -234,41 +230,30 @@ Funções organizadas por entidade:
 **Validação:**
 - `validateInstitutionalEmail()`
 
-### Banco de Dados
+### Armazenamento de Dados (arquivo JSON)
 
-#### Schema MySQL
+O sistema **não usa banco de dados**. Toda a persistência é feita em um único arquivo JSON — `db.json` — dentro do diretório configurado por `DATA_DIR` (padrão: `./data`).
 
-```sql
--- Salas
-CREATE TABLE rooms (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR(255) NOT NULL UNIQUE,
-  capacity INT NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+#### Estrutura do db.json (alto nível)
 
--- Agendamentos
-CREATE TABLE bookings (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  room_id INT NOT NULL,
-  room_name VARCHAR(255) NOT NULL,
-  client_name VARCHAR(255) NOT NULL,
-  client_email VARCHAR(255) NOT NULL,
-  date DATE NOT NULL,
-  start_time TIME NOT NULL,
-  end_time TIME NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (room_id) REFERENCES rooms(id),
-  INDEX idx_room_date (room_id, date),
-  INDEX idx_email (client_email)
-);
-```
+O arquivo guarda as coleções do sistema como arrays de objetos, com **IDs inteiros sequenciais** (mesmo modelo de IDs e mesmos formatos JSON expostos pela API):
 
-#### Índices
+- **Salas**: id, nome, capacidade, data de criação
+- **Agendamentos**: id, sala (id e nome), cliente (nome e email), data, horários de início/fim, data de criação
+- **Logs de email**: registros do processador de emails IMAP (emails recebidos e respostas automáticas)
 
-Para otimizar queries:
-- `idx_room_date`: Rápido verificar disponibilidade
-- `idx_email`: Rápido encontrar agendamentos de um cliente
+#### Ciclo de vida e concorrência
+
+- **Criação automática**: na primeira execução, o servidor cria o diretório e o arquivo (com salas iniciais de exemplo) se não existirem. Nada precisa ser provisionado antes.
+- **Leituras em memória**: os dados são mantidos em memória; as leituras não tocam o disco.
+- **Escritas atômicas**: cada gravação escreve um arquivo temporário e faz `rename` — o `db.json` nunca fica em estado parcial, mesmo se o processo cair no meio de uma escrita.
+- **Concorrência**: o modelo assume **um único processo Node**. A prevenção de reserva duplicada (double-booking), que antes seria papel de uma transação SQL, é garantida pela serialização das operações dentro do processo: a verificação de conflito e a gravação acontecem de forma sequencial, sem intercalação.
+- **Sem migrações**: não há schema rígido — campos novos são simplesmente gravados no JSON; registros antigos permanecem válidos.
+- **Versionamento e backup**: o diretório `data/` está no `.gitignore`; backup = copiar `db.json`.
+
+#### Limitações (e caminho de evolução)
+
+Esse modelo é adequado para o cenário do sistema: baixo volume de dados e um único processo. Se o uso crescer (muitos registros, necessidade de múltiplas instâncias), a evolução natural é migrar para **SQLite** ou um banco gerenciado. A camada de dados (`server/data.ts`) isola o armazenamento (`server/store.ts`) do resto da aplicação, então essa troca fica contida em poucos arquivos.
 
 ## 🔄 Fluxos Principais
 
@@ -282,9 +267,9 @@ Para otimizar queries:
    └→ Extract: name="João Silva"
    └→ Ask for email
 
-3. User → Chatbot: "joao@uni.edu.br"
-   └→ Extract: email="joao@uni.edu.br"
-   └→ Validate: ✓ .edu.br
+3. User → Chatbot: "joao@ioc.fiocruz.br"
+   └→ Extract: email="joao@ioc.fiocruz.br"
+   └→ Validate: ✓ domínio permitido (ALLOWED_EMAIL_DOMAINS)
    └→ Ask for date
 
 4. User → Chatbot: "25/12/2025"
@@ -302,7 +287,7 @@ Para otimizar queries:
    └→ Call checkAvailability API
 
 7. Chatbot → Server: POST /api/bookings/check-availability
-   └→ Query DB for conflicts
+   └→ Verifica conflitos no armazenamento
    └→ Return available rooms
 
 8. Chatbot displays rooms
@@ -318,7 +303,7 @@ Para otimizar queries:
 
 11. Chatbot → Server: POST /api/bookings
     └→ Validate all fields
-    └→ Insert into DB
+    └→ Grava no armazenamento (data/db.json)
     └→ Send confirmation email
     └→ Return booking with ID
 
@@ -330,9 +315,10 @@ Para otimizar queries:
 ### Fluxo 2: Administrador Gerencia Salas
 
 ```
-1. Admin → Login page: "admin" / "admin123"
-   └→ AuthContext.login()
-   └→ localStorage.setItem("adminAuth", "true")
+1. Admin → Login page: credenciais (ADMIN_USERNAME/ADMIN_PASSWORD via env)
+   └→ POST /api/auth/login
+   └→ Servidor valida e retorna token (validade 8h)
+   └→ Token enviado como Authorization: Bearer <token>
    └→ Redirect to /admin
 
 2. Admin → Admin panel
@@ -361,7 +347,7 @@ Para otimizar queries:
 1. User → Chatbot: "Preciso de uma sala em 15 de dezembro"
    └→ Extract: date="15/12", maybe other info
 
-2. Chatbot → OpenRouter API: POST /api/chat
+2. Chatbot → Groq API: POST /api/chat
    {
     "messages": [
       {"role": "user", "content": "..."},
@@ -369,10 +355,10 @@ Para otimizar queries:
       {"role": "user", "content": "Preciso de uma sala..."}
     ]
   }
-  └→ Server calls OpenRouter LLM
+  └→ Server calls Groq LLM
   └→ Model responds with next question
 
-3. OpenRouter → Chatbot: "Qual é a hora desejada?"
+3. Groq → Chatbot: "Qual é a hora desejada?"
    └→ Display to user
    └→ Continue conversation loop
 ```
@@ -388,17 +374,14 @@ User Input
   ↓
 Backend Validation (Server)
   ↓
-Database Constraint Validation
+Data Layer Validation
   ↓
 Response Validation
 ```
 
 ### Proteção contra Ataques
 
-1. **SQL Injection**: Prepared statements
-```typescript
-connection.execute('SELECT * FROM users WHERE id = ?', [userId]);
-```
+1. **Injeção de SQL**: Não se aplica — não há banco SQL. Os dados passam pela camada de dados tipada (`server/data.ts`) e são serializados como JSON, nunca interpolados em comandos.
 
 2. **XSS**: React escapa automaticamente
 ```typescript
@@ -406,12 +389,16 @@ connection.execute('SELECT * FROM users WHERE id = ?', [userId]);
 <div>{userInput}</div>
 ```
 
-3. **CSRF**: Verificação de origin
+3. **CSRF**: Verificação de origin via CORS configurável
 ```typescript
-app.use(cors({ origin: process.env.APP_URL }));
+// Origens permitidas definidas em CORS_ORIGIN (separadas por vírgula);
+// aberto quando a variável não está definida
+app.use(cors({ origin: allowedOrigins }));
 ```
 
-4. **Brute Force**: Rate limiting (recomendado)
+4. **Autenticação Admin**: Token no servidor (POST /api/auth/login, validade 8h) protege gestão de salas, agendamentos e processador de emails
+
+5. **Rate Limiting**: Limitador em memória no /api/chat
 
 ## 📊 Performance
 
@@ -428,18 +415,13 @@ const Admin = lazy(() => import('./pages/Admin'));
 
 ### Backend Optimization
 
-1. **Database Indexing**:
-```sql
-CREATE INDEX idx_booking_date ON bookings(date);
-```
-
-2. **Connection Pooling**: MySQL pool
-3. **Caching**: Redis (não implementado, sugestão)
-4. **Query Optimization**: Usar índices
+1. **Leituras em memória**: os dados vivem em memória — listagens e verificações de disponibilidade não tocam o disco
+2. **Escritas enxutas**: apenas as gravações persistem no arquivo (atômicas, temp + rename)
+3. **Dimensionamento**: adequado para baixo volume; se o volume crescer muito, migre a camada de dados para SQLite/banco gerenciado (troca contida em `server/data.ts`/`server/store.ts`)
 
 ### Network
 
-1. **CDN**: Netlify/Vercel provide CDN
+1. **CDN/Proxy**: nginx ou CDN opcional na frente do servidor Node.js
 2. **Compression**: gzip automático
 3. **HTTP Caching**: Cache headers
 
@@ -448,10 +430,9 @@ CREATE INDEX idx_booking_date ON bookings(date);
 ### Adicionar Nova Feature
 
 1. **Atualizar Tipos** (shared/api.ts)
-2. **Atualizar BD** (server/db.ts schema)
-3. **Atualizar DAL** (server/data.ts)
-4. **Atualizar Rotas** (server/routes/)
-5. **Atualizar Frontend** (client/components/)
+2. **Atualizar DAL** (server/data.ts) — não há migração de schema: campos novos são simplesmente gravados no JSON
+3. **Atualizar Rotas** (server/routes/)
+4. **Atualizar Frontend** (client/components/)
 
 ### Exemplo: Adicionar Campo "Observações"
 
@@ -461,19 +442,17 @@ interface Booking {
   notes?: string;  // NOVO
 }
 
-// 2. server/db.ts
-ALTER TABLE bookings ADD COLUMN notes TEXT;
-
-// 3. server/data.ts
+// 2. server/data.ts
 export async function createBooking(booking) {
-  // Incluir notes na INSERT
+  // Incluir notes no objeto gravado — registros antigos
+  // (sem o campo) continuam válidos, sem migração
 }
 
-// 4. server/routes/bookings.ts
+// 3. server/routes/bookings.ts
 const { notes } = req.body;
 booking = await createBooking({ ...data, notes });
 
-// 5. client/components/Chatbot.tsx
+// 4. client/components/Chatbot.tsx
 const [formData, setFormData] = useState({
   notes: "",  // NOVO
 });
@@ -515,17 +494,16 @@ describe('Booking API', () => {
 
 ### Horizontal Scaling
 
-Para múltiplos servidores:
-1. Load balancer (nginx, AWS ELB)
-2. Sessões em Redis (não JWT)
-3. Database replication
+⚠️ O armazenamento em arquivo pressupõe **um único processo** — não rode múltiplas instâncias/cluster sobre o mesmo `db.json`. Para escalar horizontalmente seria necessário, antes:
+1. Migrar a camada de dados para SQLite ou banco gerenciado (troca contida em `server/data.ts`/`server/store.ts`)
+2. Load balancer (nginx, AWS ELB)
+3. Sessões compartilhadas (ex.: Redis)
 
 ### Vertical Scaling
 
-Para um único servidor:
+Para um único servidor (o caminho natural deste sistema):
 1. Aumentar RAM e CPU
-2. Otimizar queries
-3. Implementar cache
+2. Implementar cache HTTP para conteúdo estático
 
 ## 🔄 Deployment Architecture
 
@@ -540,15 +518,17 @@ Git Repository (GitHub/GitLab)
   ↙              ↘
  NO                YES
   ↓                 ↓
-FAIL            Deploy to Netlify
-               (dist/spa + functions)
+FAIL            Deploy em servidor Node.js
+               (dist/spa + dist/server, PM2/systemd)
                      ↓
-                CDN Cache
+              Proxy reverso (nginx) + TLS
                      ↓
               Browser Access
                      ↓
                 User sees app
 ```
+
+> Nota: deploy serverless (Netlify) **não é adequado para produção** — o armazenamento em arquivo não persiste (sistema de arquivos efêmero) e o processador de emails (IMAP/cron) não funciona nesse ambiente. Produção deve ser um servidor Node persistente (PM2/systemd) com `DATA_DIR` gravável e persistente. Veja [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## 📨 Sistema de Emails
 
@@ -557,7 +537,7 @@ FAIL            Deploy to Netlify
 Quando um agendamento é criado:
 1. A API chama `sendBookingConfirmationEmail(booking)`
 2. Template HTML responsivo é gerado com detalhes
-3. Email é enviado via Gmail/Nodemailer
+3. Email é enviado via SMTP/Nodemailer
 
 **Dados inclusos no email:**
 - ID da reserva (#12345)
@@ -579,7 +559,7 @@ User deletes booking
         ↓
 API validates booking exists
         ↓
-Delete from database
+Remove do armazenamento (data/db.json)
         ↓
 Send cancellation email
         ↓
@@ -630,7 +610,8 @@ const getFilteredHistoryBookings = () => {
 ## 📚 Recursos Importantes
 
 - **Tipos**: `shared/api.ts` - Fonte única de verdade
-- **Schemas**: `server/db.ts` - Estrutura de dados
+- **Armazenamento**: `server/store.ts` - Store JSON (`data/db.json`, escrita atômica)
+- **Camada de Dados**: `server/data.ts` - API estável sobre o armazenamento
 - **Routes**: `server/index.ts` - Mapeamento de endpoints
 - **Componentes**: `client/components/` - UI React
 - **Email Service**: `server/services/email.ts` - Confirmação e cancelamento
@@ -638,8 +619,8 @@ const getFilteredHistoryBookings = () => {
 
 ---
 
-**Versão**: 1.1.0
-**Última atualização**: 2024
+**Versão**: 1.0.0
+**Última atualização**: 2026
 **Mudanças Recentes**:
 - ✅ Adicionado sistema de emails de cancelamento
 - ✅ Adicionado ID de reserva visível no admin

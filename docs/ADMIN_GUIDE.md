@@ -6,13 +6,13 @@ Este guia descreve como usar o painel administrativo para gerenciar salas e agen
 
 ### Login
 
-1. Acesse: **http://localhost:5173/admin** (ou seu domínio de produção)
-2. Digite as credenciais:
-   - **Usuário**: `admin`
-   - **Senha**: `admin123`
+1. Acesse: **http://localhost:8080/admin** (desenvolvimento) ou seu domínio de produção
+2. Digite as credenciais configuradas nas variáveis de ambiente `ADMIN_USERNAME` e `ADMIN_PASSWORD` (em desenvolvimento, o padrão é `admin`/`admin123`)
 3. Clique em "Entrar"
 
-⚠️ **Segurança**: Altere as credenciais padrão imediatamente em produção!
+O login é validado **no servidor** e retorna um token de sessão com validade de **8 horas**. Após esse período, será necessário fazer login novamente.
+
+⚠️ **Segurança**: Em produção, `ADMIN_PASSWORD` é obrigatória — nunca use a senha padrão de desenvolvimento!
 
 ### Interface Principal
 
@@ -98,7 +98,7 @@ A aba "Agendamentos" mostra apenas agendamentos **ATIVOS** (futuros). Agendament
 2. Um modal abrirá com os dados atuais
 3. Você pode modificar:
    - **Nome do Cliente**: Nome completo
-   - **Email**: Email institucional (.edu.br)
+   - **Email**: Email institucional (domínio permitido — padrão `fiocruz.br`/`edu.br`, configurável via `ALLOWED_EMAIL_DOMAINS`)
    - **Data**: Data do agendamento (YYYY-MM-DD)
    - **Hora Início**: Formato HH:mm (ex: 14:30)
    - **Hora Fim**: Formato HH:mm (ex: 15:30)
@@ -156,15 +156,19 @@ A página inicial do painel mostra:
 
 ### Alterar Senha Admin
 
-⚠️ **Importante**: A senha padrão é `admin123`. Você DEVE alterar isto em produção.
+⚠️ **Importante**: Em produção, você DEVE definir uma senha própria — o padrão `admin123` só existe em desenvolvimento.
 
-Para alterar (via código):
-1. Edite `client/context/AuthContext.tsx`
-2. Procure por: `if (username === "admin" && password === "admin123")`
-3. Altere a senha
-4. Recompile a aplicação
+As credenciais são configuradas por variáveis de ambiente (não há senha no código):
 
-**Melhor prática**: Use um gerenciador de senhas com hash em produção.
+1. Edite o arquivo `.env` (ou as variáveis do ambiente do servidor)
+2. Defina:
+   ```env
+   ADMIN_USERNAME=admin
+   ADMIN_PASSWORD=sua-senha-forte
+   ```
+3. Reinicie o servidor
+
+**Melhor prática**: Use uma senha longa e única (mínimo 12 caracteres), guardada em um gerenciador de senhas.
 
 ### Logout
 
@@ -182,7 +186,7 @@ Para alterar (via código):
 ### Para Agendamentos
 
 - **Nome do Cliente**: Obrigatório, deve conter pelo menos 2 caracteres
-- **Email**: Obrigatório, deve ser válido e terminar em `.edu.br`
+- **Email**: Obrigatório, deve ser válido e pertencer a um domínio permitido (padrão: `fiocruz.br` e `edu.br`, subdomínios inclusos — ex.: `@ioc.fiocruz.br`)
 - **Data**: Obrigatória, deve ser hoje ou no futuro
 - **Hora Início**: Obrigatória, formato HH:mm (00:00 a 23:59)
 - **Hora Fim**: Obrigatória, deve ser DEPOIS da hora início
@@ -192,7 +196,7 @@ Para alterar (via código):
 
 O sistema previne:
 - Agendamentos sobrepostos na mesma sala
-- Emails inválidos (não .edu.br)
+- Emails de domínios não permitidos (fora de `ALLOWED_EMAIL_DOMAINS`)
 - Datas no passado
 - Horas inválidas (fim antes de início)
 
@@ -248,7 +252,7 @@ O sistema automaticamente:
 
 ### Rotina Mensal
 
-1. **Backup de dados**: Salvar banco de dados
+1. **Backup de dados**: Copiar o arquivo de dados (`data/db.json`)
 2. **Revisar logs**: Verificar atividades
 3. **Revisar histórico**: Usar filtro de mês anterior para análise
 4. **Relatório**: Gerar estatísticas do mês
@@ -270,10 +274,11 @@ O sistema automaticamente:
 - Depois delete a sala
 
 ### "Email inválido ao salvar agendamento"
-❌ Problema: Email não termina em .edu.br
+❌ Problema: Email não pertence a um domínio permitido
 ✅ Solução:
-- Use apenas emails institucionais
-- Formato: usuario@instituicao.edu.br
+- Use apenas emails institucionais (padrão: `fiocruz.br` ou `edu.br`, subdomínios inclusos)
+- Exemplos: usuario@ioc.fiocruz.br, usuario@instituicao.edu.br
+- Para aceitar outros domínios, ajuste `ALLOWED_EMAIL_DOMAINS` no `.env`
 
 ### "Horário inválido"
 ❌ Problema: Formato incorreto ou lógica inválida
@@ -339,6 +344,6 @@ Se precisa converter:
 ---
 
 **Versão**: 1.0.0
-**Última atualização**: 2024
+**Última atualização**: 2026
 
 Administração responsável! 🛡️

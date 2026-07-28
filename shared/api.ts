@@ -19,14 +19,7 @@ export interface Booking {
   date: string; // ISO date string
   startTime: string; // HH:mm format
   endTime: string; // HH:mm format
-  duration?: string; // Duration in minutes or text (e.g., "90 minutos")
-  equipment?: string; // Extra equipment needed (e.g., "Projetor, Quadro branco")
   createdAt: string;
-}
-
-export interface CreateRoomRequest {
-  name: string;
-  capacity: number;
 }
 
 export interface CreateBookingRequest {
@@ -36,8 +29,6 @@ export interface CreateBookingRequest {
   date: string;
   startTime: string;
   endTime: string;
-  duration?: string;
-  equipment?: string;
 }
 
 export interface ListRoomsResponse {
@@ -63,11 +54,30 @@ export interface CreateBookingResponse {
   booking: Booking;
 }
 
-export interface AvailableSlot {
-  date: string;
-  startTime: string;
+// ---------------------------------------------------------------------------
+// Autenticação administrativa
+// ---------------------------------------------------------------------------
+
+export interface AdminLoginRequest {
+  username: string;
+  password: string;
 }
 
-export interface DemoResponse {
-  message: string;
+export interface AdminLoginResponse {
+  success: boolean;
+  /** Presente apenas em caso de sucesso. */
+  token?: string;
+  /** ISO date string — presente apenas em caso de sucesso. */
+  expiresAt?: string;
+  /** Presente apenas em caso de falha. */
+  error?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Configuração pública da aplicação
+// ---------------------------------------------------------------------------
+
+export interface AppConfigResponse {
+  /** Domínios de email institucionais aceitos (ex.: ["fiocruz.br", "edu.br"]). */
+  allowedEmailDomains: string[];
 }

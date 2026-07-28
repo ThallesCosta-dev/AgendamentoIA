@@ -32,8 +32,6 @@ export default defineConfig({
         // Dependências externas que não devem ser agrupadas
         "express",
         "cors",
-        "mysql2",
-        "mysql2/promise",
       ],
       output: {
         format: "es",

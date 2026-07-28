@@ -11,21 +11,22 @@
 ### Para Usuários
 - **Chatbot Inteligente**: Interface conversacional em português para agendamento de salas
 - **Agendamento em Tempo Real**: Verificação instantânea de disponibilidade
-- **Validação Inteligente**: Extração automática de informações (nome, email, data, horário)
+- **Extração Automática de Dados**: O chatbot identifica nome, email, data e horário na conversa
 - **Modificação e Cancelamento**: Gerencia suas reservas de forma simples
 - **Confirmação por Email**: Receba confirmação e detalhes da reserva por email
+- **Agendamento por Email**: Emails enviados para a caixa institucional são processados automaticamente (classificação por palavras-chave/regex)
 
 ### Para Administradores
 - **Painel de Controle**: Interface clara e intuitiva para gerenciar a plataforma
 - **Gerenciamento de Salas**: Criar, editar e deletar salas de agendamento
 - **Gerenciamento de Agendamentos**: Visualizar, modificar ou cancelar reservas
-- **Autenticação Segura**: Login protegido para acesso ao painel admin
+- **Autenticação Segura**: Login no servidor com token (validade de 8 horas)
 
 ### Para Desenvolvedores
 - **API REST Completa**: Endpoints bem documentados para integração
-- **Stack Moderno**: React, TypeScript, Express, MySQL
+- **Stack Moderno**: React, TypeScript, Express, armazenamento em arquivo JSON
 - **Código Limpo**: Estrutura bem organizada e fácil de manter
-- **Deploy Simplificado**: Suporte para Netlify, Vercel e Node.js
+- **Deploy Simplificado**: Servidor Node.js único (PM2/systemd)
 
 ## 🚀 Quick Start
 
@@ -46,13 +47,17 @@ cp .env.example .env
 npm run dev
 ```
 
+> Não há banco de dados para instalar ou configurar: o arquivo de dados (`data/db.json`) é criado automaticamente na primeira execução.
+
 ### Acesso Inicial
 
-- **Aplicação**: http://localhost:5173
-- **Admin Panel**: http://localhost:5173/admin
-- **Credenciais Padrão**: 
-  - Usuário: `admin`
-  - Senha: `admin123`
+Em desenvolvimento, tudo roda em uma única porta (o Vite serve o SPA e monta o Express como middleware — não há porta separada de backend):
+
+- **Aplicação**: http://localhost:8080
+- **Admin Panel**: http://localhost:8080/admin
+- **Credenciais Admin**: configuradas pelas variáveis de ambiente `ADMIN_USERNAME` e `ADMIN_PASSWORD`. Em desenvolvimento, o padrão é `admin` / `admin123`; em produção, `ADMIN_PASSWORD` é **obrigatória** e deve ser alterada.
+
+Em produção (`npm run build` + `npm start`), a aplicação roda na porta **3000** (configurável via `PORT`).
 
 ## 📚 Documentação
 
@@ -81,37 +86,63 @@ A documentação está organizada em múltiplos arquivos para facilitar a navega
 ### Backend
 - **Node.js** - Runtime
 - **Express 5** - Framework web
-- **MySQL 2** - Banco de dados
-- **OpenRouter AI** - LLM para chatbot
+- **Armazenamento em arquivo JSON (sem banco de dados)** - dados em `data/db.json`, criado automaticamente
+- **Groq** - LLM do chatbot (modelo `llama-3.3-70b-versatile`, tier gratuito)
+- **IMAP + Nodemailer** - Processamento e envio de emails
 
 ### DevOps
-- **Vite** - Build tool
+- **Vite** - Build tool (dev server na porta 8080 com Express integrado)
 - **TypeScript** - Compilação
-- **Netlify/Vercel** - Deployment
+- **PM2/systemd** - Deploy recomendado (servidor Node.js)
 
 ## 📋 Requisitos de Sistema
 
 - **Node.js**: v22.0.0 ou superior
-- **npm/pnpm**: v10.14.0 ou superior
-- **MySQL**: v8.0 ou superior
+- **npm**: v10.0.0 ou superior
 - **Navegador**: Chrome, Firefox, Safari ou Edge (versões recentes)
+
+> Não é necessário nenhum servidor de banco de dados: os dados ficam em um arquivo JSON (`data/db.json`) criado automaticamente na primeira execução.
 
 ## 🔑 Variáveis de Ambiente
 
 ```env
-# Banco de Dados
-DB_HOST=seu-host-mysql
-DB_USER=seu-usuario
-DB_PASSWORD=sua-senha
-DB_NAME=seu-banco
-DB_PORT=3306
+# Armazenamento de dados — opcional
+DATA_DIR=./data   # diretório do arquivo db.json (padrão: ./data)
 
-# AI / Chatbot
-OPENROUTER_API_KEY=sua-chave-openrouter
+# IA / Chatbot (obrigatória para o chatbot funcionar)
+GROQ_API_KEY=sua-chave-groq
+GROQ_MODEL=llama-3.3-70b-versatile   # opcional (padrão)
+
+# Email de confirmação (SMTP)
+SMTP_HOST=smtp.seuservidor.br
+SMTP_PORT=587
+SMTP_USER=usuario@dominio.br
+SMTP_PASS=sua-senha-smtp
+SMTP_TLS=true
+EMAIL_FROM=SalaAgenda <nao-responda@dominio.br>   # opcional
+# Alternativa legada: EMAIL_USER + EMAIL_PASSWORD (Gmail com senha de aplicativo)
+
+# Processador de emails (IMAP) — opcional
+IOC_EMAIL_HOST=imap.gmail.com
+IOC_EMAIL_PORT=993
+IOC_EMAIL_USER=caixa-monitorada@dominio
+IOC_EMAIL_PASSWORD=senha-de-aplicativo
+IOC_EMAIL_FOLDER=INBOX
+IOC_EMAIL_CHECK_INTERVAL=5
+IOC_EMAIL_PROCESSING_ENABLED=false
 
 # Aplicação
-APP_URL=http://localhost:5173
+APP_URL=http://localhost:8080
 PORT=3000
+NODE_ENV=development
+
+# Autenticação do painel admin
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=defina-uma-senha-forte   # obrigatória em produção
+
+# Segurança
+ALLOWED_EMAIL_DOMAINS=fiocruz.br,edu.br  # domínios de email aceitos (subdomínios inclusos)
+CORS_ORIGIN=https://seudominio.com       # origens permitidas (separadas por vírgula); aberto se não definida
 ```
 
 Veja [SETUP.md](docs/SETUP.md) para mais detalhes.
@@ -119,7 +150,7 @@ Veja [SETUP.md](docs/SETUP.md) para mais detalhes.
 ## 👥 Uso Típico
 
 ### Usuário Agendando uma Sala
-1. Acessar o chatbot em http://localhost:5173
+1. Acessar o chatbot em http://localhost:8080
 2. Conversar naturalmente com o assistente
 3. Informar: nome, email, data e horários desejados
 4. Selecionar sala disponível
@@ -127,19 +158,20 @@ Veja [SETUP.md](docs/SETUP.md) para mais detalhes.
 6. Receber confirmação por email
 
 ### Administrador Gerenciando Salas
-1. Acessar painel em http://localhost:5173/admin
-2. Login com credenciais admin
+1. Acessar painel em http://localhost:8080/admin
+2. Login com credenciais admin (definidas via `ADMIN_USERNAME`/`ADMIN_PASSWORD`)
 3. Criar/editar/deletar salas
 4. Visualizar e gerenciar agendamentos
 5. Modificar ou cancelar reservas conforme necessário
 
 ## 🔐 Segurança
 
-- **Validação de Email**: Aceita apenas emails .edu.br (institucionais)
-- **Autenticação Admin**: Login protegido com armazenamento local seguro
+- **Autenticação Admin no Servidor**: Login via `POST /api/auth/login` retorna um token (validade de 8 horas) enviado como `Authorization: Bearer <token>`. Endpoints administrativos (gestão de salas, agendamentos e processador de emails) exigem esse token.
+- **Validação de Email**: Lista de domínios permitidos configurável via `ALLOWED_EMAIL_DOMAINS` (padrão: `fiocruz.br,edu.br`, subdomínios aceitos — ex.: `@ioc.fiocruz.br`)
 - **Validação de Dados**: Todos os inputs são validados no backend
-- **CORS Ativado**: Controle de origem configurável
-- **Rate Limiting**: Proteção contra abuso (recomendado em produção)
+- **CORS Configurável**: Origens permitidas definidas via `CORS_ORIGIN` (aberto quando não definida)
+- **Rate Limiting**: Limitador em memória no endpoint `/api/chat`
+- **Reservas sem Conflito**: Prevenção de agendamentos duplicados na mesma sala/horário — a verificação e a gravação são serializadas no processo único do servidor
 
 ## 📞 Suporte
 
@@ -165,7 +197,7 @@ Veja [SETUP.md](docs/SETUP.md) para mais detalhes.
 
 ## 📄 Licença
 
-Este projeto está licenciado sob a Licença MIT - veja o arquivo LICENSE para detalhes.
+Este projeto está licenciado sob a Licença MIT - veja o arquivo [LICENSE](LICENSE) para detalhes.
 
 ## 👨‍💻 Autores
 
@@ -173,5 +205,5 @@ Desenvolvido com ❤️ como assistente inteligente de agendamento.
 
 ---
 
-**Última atualização**: 2024
+**Última atualização**: 2026
 **Versão**: 1.0.0

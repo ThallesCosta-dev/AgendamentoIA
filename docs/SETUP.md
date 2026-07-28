@@ -6,13 +6,13 @@ Este documento descreve como instalar, configurar e executar o SalaAgenda em dif
 
 ### Obrigatórios
 - **Node.js**: v22.0.0 ou superior
-- **npm**: v10.0.0 ou superior (ou pnpm v10.14.0+)
-- **MySQL**: v8.0 ou superior
+- **npm**: v10.0.0 ou superior
+
+> Não é necessário nenhum servidor de banco de dados (nem solicitar instalação ao setor de TI): os dados ficam em um arquivo JSON criado automaticamente pela aplicação.
 
 ### Opcionais
 - **Git**: Para clonar o repositório
 - **VS Code**: Editor recomendado
-- **MySQL Workbench**: Para gerenciar banco de dados
 
 ## 🔧 Instalação
 
@@ -26,15 +26,10 @@ cd salaagenda
 ### Passo 2: Instalar Dependências
 
 ```bash
-# Com npm
 npm install
-
-# Ou com pnpm (recomendado)
-pnpm install
-
-# Ou com yarn
-yarn install
 ```
+
+> **Nota**: O projeto usa **npm** como gerenciador de pacotes (o `package-lock.json` é o lockfile oficial). Não use pnpm ou yarn para evitar lockfiles divergentes.
 
 ### Passo 3: Configurar Variáveis de Ambiente
 
@@ -48,63 +43,83 @@ Edite o arquivo `.env` com suas informações:
 
 ```env
 # ========================================
-# CONFIGURAÇÃO DO BANCO DE DADOS
+# ARMAZENAMENTO DE DADOS - Opcional
 # ========================================
-DB_HOST=localhost
-DB_USER=root
-DB_PASSWORD=sua_senha_mysql
-DB_NAME=salaagenda
-DB_PORT=3306
+# Diretório onde o arquivo db.json é criado (padrão: ./data)
+DATA_DIR=./data
 
 # ========================================
-# CONFIGURAÇÃO DA IA (OpenRouter)
+# CONFIGURAÇÃO DA IA (Groq)
 # ========================================
-OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxxx
+# Obrigatória para o chatbot funcionar — chave gratuita em https://console.groq.com/keys
+GROQ_API_KEY=gsk_xxxxxxxxxxxxx
+# Modelo (opcional, padrão: llama-3.3-70b-versatile)
+GROQ_MODEL=llama-3.3-70b-versatile
 
 # ========================================
 # CONFIGURAÇÃO DA APLICAÇÃO
 # ========================================
-APP_URL=http://localhost:5173
+APP_URL=http://localhost:8080
 PORT=3000
 NODE_ENV=development
 
 # ========================================
-# EMAIL (Opcional - para confirmações)
+# AUTENTICAÇÃO ADMIN
 # ========================================
-SMTP_HOST=smtp.gmail.com
+# Em desenvolvimento, o padrão é admin/admin123.
+# Em produção, ADMIN_PASSWORD é OBRIGATÓRIA.
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=defina-uma-senha-forte
+
+# ========================================
+# VALIDAÇÃO DE EMAIL
+# ========================================
+# Domínios aceitos (subdomínios inclusos). Padrão: fiocruz.br,edu.br
+ALLOWED_EMAIL_DOMAINS=fiocruz.br,edu.br
+
+# ========================================
+# CORS
+# ========================================
+# Origens permitidas, separadas por vírgula. Aberto se não definida.
+# CORS_ORIGIN=https://seudominio.com
+
+# ========================================
+# EMAIL DE CONFIRMAÇÃO (SMTP)
+# ========================================
+# Servidor SMTP usado para enviar confirmações/cancelamentos.
+SMTP_HOST=smtp.seuservidor.br
 SMTP_PORT=587
-SMTP_USER=seu-email@gmail.com
-SMTP_PASSWORD=sua-senha-app-google
+SMTP_USER=usuario@dominio.br
+SMTP_PASS=sua-senha-smtp
+# true = exigir TLS (porta 465 usa TLS implícito automaticamente)
+SMTP_TLS=true
+# Remetente exibido nos emails (opcional)
+EMAIL_FROM=SalaAgenda <nao-responda@dominio.br>
+# Alternativa legada (usada apenas se SMTP_* não estiver definido):
+# EMAIL_USER=conta@gmail.com + EMAIL_PASSWORD=senha-de-aplicativo-gmail
+
+# ========================================
+# PROCESSADOR DE EMAILS (IMAP) - Opcional
+# ========================================
+IOC_EMAIL_HOST=imap.gmail.com
+IOC_EMAIL_PORT=993
+IOC_EMAIL_USER=caixa-monitorada@dominio
+IOC_EMAIL_PASSWORD=senha-de-aplicativo
+IOC_EMAIL_FOLDER=INBOX
+IOC_EMAIL_CHECK_INTERVAL=5
+IOC_EMAIL_PROCESSING_ENABLED=false
 ```
 
-### Passo 4: Configurar Banco de Dados
+### Passo 4: Armazenamento de Dados (automático)
 
-#### Opção A: MySQL Local
+Não há banco de dados para criar ou configurar. Na primeira execução, o servidor cria automaticamente o arquivo `data/db.json`, que guarda **todas** as salas, agendamentos e logs de email — inclusive salas iniciais de exemplo.
 
-```bash
-# 1. Abrir MySQL CLI
-mysql -u root -p
+- **Localização**: por padrão, o diretório `./data` na raiz do projeto. Pode ser alterado pela variável de ambiente `DATA_DIR`.
+- **Versionamento**: o diretório `data/` está no `.gitignore` — os dados não vão para o repositório.
+- **Escrita segura**: as gravações são atômicas (arquivo temporário + rename), seguras para um único processo Node.
+- **Backup**: basta copiar o arquivo `data/db.json`.
 
-# 2. Criar banco de dados
-CREATE DATABASE salaagenda;
-CREATE USER 'salaagenda_user'@'localhost' IDENTIFIED BY 'senha_segura';
-GRANT ALL PRIVILEGES ON salaagenda.* TO 'salaagenda_user'@'localhost';
-FLUSH PRIVILEGES;
-```
-
-#### Opção B: Usando MySQL Docker
-
-```bash
-docker run --name mysql-salaagenda \
-  -e MYSQL_ROOT_PASSWORD=root \
-  -e MYSQL_DATABASE=salaagenda \
-  -p 3306:3306 \
-  -d mysql:8.0
-```
-
-### Passo 5: Inicializar Banco de Dados
-
-O banco será criado automaticamente ao iniciar o servidor. As tabelas são geradas no primeiro acesso.
+> Nada precisa "existir previamente": se o diretório ou o arquivo não existirem, eles são criados na primeira execução.
 
 ## 🚀 Executando a Aplicação
 
@@ -114,10 +129,11 @@ O banco será criado automaticamente ao iniciar o servidor. As tabelas são gera
 # Inicia servidor com reload automático
 npm run dev
 
-# Acesso
-# - Frontend: http://localhost:5173
-# - Backend: http://localhost:3000
-# - API: http://localhost:3000/api
+# Acesso (tudo em uma única porta — o Vite serve o SPA
+# e monta o Express como middleware)
+# - Aplicação: http://localhost:8080
+# - Admin: http://localhost:8080/admin
+# - API: http://localhost:8080/api
 ```
 
 ### Produção
@@ -129,7 +145,7 @@ npm run build
 # Iniciar servidor
 npm run start
 
-# A aplicação estará em http://localhost:3000
+# A aplicação estará em http://localhost:3000 (configurável via PORT)
 ```
 
 ## 📦 Scripts Disponíveis
@@ -145,14 +161,14 @@ npm run format.fix      # Formatar código (Prettier)
 npm run typecheck       # Verificar tipos TypeScript
 ```
 
-## 🔑 Primeiras Credenciais
+## 🔑 Credenciais do Painel Admin
 
-Ao iniciar a aplicação, use as seguintes credenciais para acessar o painel admin:
+As credenciais do painel administrativo são configuradas via variáveis de ambiente:
 
-- **Usuário**: `admin`
-- **Senha**: `admin123`
+- **`ADMIN_USERNAME`**: usuário do admin (padrão: `admin`)
+- **`ADMIN_PASSWORD`**: senha do admin — **obrigatória em produção**; em desenvolvimento, se não definida, usa o padrão `admin123` (apenas dev)
 
-⚠️ **Importante**: Altere essas credenciais em produção! Veja o guia de segurança.
+⚠️ **Importante**: Nunca use o padrão de desenvolvimento em produção. Defina uma senha forte em `ADMIN_PASSWORD`.
 
 ## 🗄️ Estrutura de Pastas
 
@@ -177,10 +193,10 @@ salaagenda/
 │   │   ├── ai.ts        # Endpoints IA
 │   │   ├── bookings.ts  # Agendamentos
 │   │   ├── rooms.ts     # Salas
-│   │   └── chat.ts      # Chat (OpenRouter)
+│   │   └── chat.ts      # Chat (Groq)
 │   ├── services/         # Serviços (email, etc)
-│   ├── data.ts           # Lógica de dados
-│   ├── db.ts             # Conexão MySQL
+│   ├── data.ts           # Lógica de dados (camada de dados)
+│   ├── store.ts          # Armazenamento JSON (data/db.json)
 │   └── index.ts          # Servidor Express
 ├── shared/                 # Código compartilhado
 │   └── api.ts            # Tipos TypeScript
@@ -208,7 +224,6 @@ salaagenda/
 ```json
 {
   "express": "^5.1.0",
-  "mysql2": "^3.15.3",
   "nodemailer": "^7.0.10",
   "cors": "^2.8.5",
   "dotenv": "^17.2.1"
@@ -218,11 +233,8 @@ salaagenda/
 ## 🧪 Testes
 
 ```bash
-# Executar testes
+# Executar testes (vitest, arquivos *.spec.ts)
 npm run test
-
-# Com coverage
-npm run test -- --coverage
 
 # Watch mode
 npm run test -- --watch
@@ -240,41 +252,36 @@ npm run format.fix
 
 ## ⚠️ Solução de Problemas
 
-### Erro: "Can't connect to MySQL server"
+### Erro ao criar/gravar o arquivo de dados
+- Verifique se o processo tem permissão de escrita no diretório configurado em `DATA_DIR` (padrão: `./data`)
+- Verifique se o disco não está cheio
+- Se o diretório não existir, o servidor tenta criá-lo automaticamente na primeira execução
+
+### Erro: "Serviço de IA não configurado no servidor"
+- Obtenha uma chave gratuita em https://console.groq.com/keys
+- Adicione como `GROQ_API_KEY` em seu arquivo `.env`
+
+### Erro: "Port already in use"
 ```bash
-# Verificar se MySQL está rodando
-# Linux/Mac
-sudo systemctl status mysql
+# Em produção, mudar a porta em .env
+PORT=3100
 
-# Windows
-sc query MySQL80
-
-# Ou usar Docker
-docker start mysql-salaagenda
+# Ou matar o processo que ocupa a porta (ex.: 8080 em dev)
+lsof -ti:8080 | xargs kill -9
 ```
 
-### Erro: "OPENROUTER_API_KEY not configured"
-- Obtenha uma chave em https://openrouter.ai/
-- Adicione em seu arquivo `.env`
-
-### Erro: "Port 3000 already in use"
+### Resetar os dados (começar do zero)
 ```bash
-# Mudar a porta em .env
-PORT=3001
+# 1. Parar o servidor
 
-# Ou matar o processo
-lsof -ti:3000 | xargs kill -9
-```
+# 2. Remover o arquivo de dados
+rm data/db.json   # (Windows: del data\db.json)
 
-### Banco de dados não sincroniza
-```bash
-# Deletar e recrie o banco
-DROP DATABASE salaagenda;
-CREATE DATABASE salaagenda;
-
-# Reiniciar servidor (será criado automaticamente)
+# 3. Reiniciar — o arquivo é recriado com as salas iniciais de exemplo
 npm run dev
 ```
+
+⚠️ Isso apaga **todas** as salas, agendamentos e logs. Faça uma cópia de `data/db.json` antes, se quiser preservar os dados.
 
 ## 📚 Próximas Etapas
 
@@ -294,4 +301,4 @@ Se encontrar problemas:
 ---
 
 **Versão**: 1.0.0
-**Última atualização**: 2024
+**Última atualização**: 2026

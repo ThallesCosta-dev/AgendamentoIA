@@ -5,11 +5,17 @@
 
 
 [functions]
-  external_node_modules = ["express"]
+  external_node_modules = ["express", "imap", "mailparser", "nodemailer", "node-cron"]
   node_bundler = "esbuild"
-  
+
 [[redirects]]
   force = true
   from = "/api/*"
   status = 200
   to = "/.netlify/functions/api/:splat"
+
+# Fallback SPA — deve vir DEPOIS do redirect /api/*
+[[redirects]]
+  from = "/*"
+  status = 200
+  to = "/index.html"

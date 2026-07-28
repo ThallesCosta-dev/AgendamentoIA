@@ -11,11 +11,19 @@ import {
   getBookings,
   getRooms,
   bookingExists,
-  validateInstitutionalEmail,
   getBookingById,
   updateBookingById,
   deleteBookingById,
+  BookingConflictError,
 } from "../data";
+import {
+  validateDate,
+  validateTime,
+  validateTimeRange,
+  validateInstitutionalEmail,
+  institutionalEmailErrorMessage,
+  timeToMinutes,
+} from "../utils/validation";
 import { sendBookingConfirmationEmail } from "../services/email";
 
 export const handleListBookings: RequestHandler = async (_req, res) => {
@@ -25,7 +33,7 @@ export const handleListBookings: RequestHandler = async (_req, res) => {
     res.json(response);
   } catch (error) {
     console.error("Error listing bookings:", error);
-    res.status(500).json({ error: "Failed to list bookings" });
+    res.status(500).json({ error: "Não foi possível listar os agendamentos" });
   }
 };
 
@@ -34,7 +42,7 @@ export const handleCheckAvailability: RequestHandler = async (req, res) => {
     const { date, startTime, endTime } = req.body as CheckAvailabilityRequest;
 
     if (!date || !startTime || !endTime) {
-      res.status(400).json({ error: "Missing required fields" });
+      res.status(400).json({ error: "Campos obrigatórios ausentes" });
       return;
     }
 
@@ -60,60 +68,10 @@ export const handleCheckAvailability: RequestHandler = async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error("Error checking availability:", error);
-    res.status(500).json({ error: "Failed to check availability" });
+    res
+      .status(500)
+      .json({ error: "Não foi possível verificar a disponibilidade" });
   }
-};
-
-const validateDate = (dateStr: string): boolean => {
-  // Armazenamento interno usa formato YYYY-MM-DD
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-    return false;
-  }
-
-  const [year, month, day] = dateStr.split("-").map(Number);
-
-  // Verifica se é uma data de calendário válida
-  const selectedDate = new Date(year, month - 1, day);
-  if (
-    selectedDate.getFullYear() !== year ||
-    selectedDate.getMonth() !== month - 1 ||
-    selectedDate.getDate() !== day
-  ) {
-    return false;
-  }
-
-  // Data deve ser hoje ou no futuro (sem datas passadas)
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  selectedDate.setHours(0, 0, 0, 0);
-
-  return selectedDate >= today;
-};
-
-const validateTime = (timeStr: string): boolean => {
-  // Valida formato HH:mm (00:00 a 23:59)
-  if (!/^\d{2}:\d{2}$/.test(timeStr)) {
-    return false;
-  }
-
-  const [hours, minutes] = timeStr.split(":").map(Number);
-  return hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59;
-};
-
-const validateTimeRange = (startTime: string, endTime: string): boolean => {
-  // Both times must be valid format
-  if (!validateTime(startTime) || !validateTime(endTime)) {
-    return false;
-  }
-
-  // Hora final deve ser depois da hora inicial
-  const [startHours, startMinutes] = startTime.split(":").map(Number);
-  const [endHours, endMinutes] = endTime.split(":").map(Number);
-
-  const startTotalMinutes = startHours * 60 + startMinutes;
-  const endTotalMinutes = endHours * 60 + endMinutes;
-
-  return endTotalMinutes > startTotalMinutes;
 };
 
 export const handleCreateBooking: RequestHandler = async (req, res) => {
@@ -130,62 +88,59 @@ export const handleCreateBooking: RequestHandler = async (req, res) => {
       !startTime ||
       !endTime
     ) {
-      res.status(400).json({ error: "Missing required fields" });
+      res.status(400).json({ error: "Campos obrigatórios ausentes" });
       return;
     }
 
     // Valida formato e intervalo da data
     if (!validateDate(date)) {
       res.status(400).json({
-        error: "Data inválida. A data deve ser hoje ou no futuro (formato: DD-MM-YYYY)",
+        error:
+          "Data inválida. A data deve ser hoje ou no futuro (formato: YYYY-MM-DD)",
       });
       return;
     }
 
     // Valida formato e intervalo da hora
     if (!validateTime(startTime)) {
-      res.status(400).json({ error: "Invalid start time format (use HH:mm)" });
+      res
+        .status(400)
+        .json({ error: "Horário de início inválido (use o formato HH:mm)" });
       return;
     }
 
     if (!validateTime(endTime)) {
-      res.status(400).json({ error: "Invalid end time format (use HH:mm)" });
+      res
+        .status(400)
+        .json({ error: "Horário de término inválido (use o formato HH:mm)" });
       return;
     }
 
     if (!validateTimeRange(startTime, endTime)) {
       res.status(400).json({
-        error: "End time must be after start time",
+        error: "O horário de término deve ser depois do horário de início",
       });
       return;
     }
 
     // Valida email institucional
     if (!validateInstitutionalEmail(clientEmail)) {
-      res.status(400).json({
-        error:
-          "Email must be from a Brazilian educational institution (.edu.br)",
-      });
+      res.status(400).json({ error: institutionalEmailErrorMessage() });
       return;
     }
 
     // Verifica se a sala existe
     const rooms = await getRooms();
-    const room = rooms.find((r) => r.id === roomId);
+    const room = rooms.find((r) => String(r.id) === String(roomId));
     if (!room) {
-      res.status(404).json({ error: "Room not found" });
+      res.status(404).json({ error: "Sala não encontrada" });
       return;
     }
 
-    // Verifica disponibilidade
-    const isBooked = await bookingExists(roomId, date, startTime, endTime);
-    if (isBooked) {
-      res.status(409).json({
-        error: "Room is not available for the requested time slot",
-      });
-      return;
-    }
-
+    // A verificação de disponibilidade e a inserção acontecem de forma
+    // síncrona (sem await entre elas) dentro de createBooking — com o Node
+    // single-threaded, isso garante a ausência de reservas duplicadas no
+    // armazenamento em memória.
     const booking = await createBooking({
       roomId,
       roomName: room.name,
@@ -205,8 +160,14 @@ export const handleCreateBooking: RequestHandler = async (req, res) => {
     const response: CreateBookingResponse = { booking };
     res.status(201).json(response);
   } catch (error) {
+    if (error instanceof BookingConflictError) {
+      res
+        .status(409)
+        .json({ error: "A sala não está disponível no horário solicitado" });
+      return;
+    }
     console.error("Error creating booking:", error);
-    res.status(500).json({ error: "Failed to create booking" });
+    res.status(500).json({ error: "Não foi possível criar o agendamento" });
   }
 };
 
@@ -215,7 +176,7 @@ export const handleGetAvailableTimes: RequestHandler = async (req, res) => {
     const { date } = req.query as { date: string };
 
     if (!date) {
-      res.status(400).json({ error: "Date is required" });
+      res.status(400).json({ error: "A data é obrigatória" });
       return;
     }
 
@@ -232,22 +193,18 @@ export const handleGetAvailableTimes: RequestHandler = async (req, res) => {
       if (!bookedSlots[booking.roomId]) {
         bookedSlots[booking.roomId] = [];
       }
-      const startMinutes =
-        parseInt(booking.startTime.split(":")[0]) * 60 +
-        parseInt(booking.startTime.split(":")[1]);
-      const endMinutes =
-        parseInt(booking.endTime.split(":")[0]) * 60 +
-        parseInt(booking.endTime.split(":")[1]);
       bookedSlots[booking.roomId].push({
-        start: startMinutes,
-        end: endMinutes,
+        start: timeToMinutes(booking.startTime),
+        end: timeToMinutes(booking.endTime),
       });
     });
 
     res.json({ availableRooms: allRooms, bookedSlots });
   } catch (error) {
     console.error("Error getting available times:", error);
-    res.status(500).json({ error: "Failed to get available times" });
+    res
+      .status(500)
+      .json({ error: "Não foi possível obter os horários disponíveis" });
   }
 };
 
@@ -257,14 +214,14 @@ export const handleGetBooking: RequestHandler = async (req, res) => {
     const booking = await getBookingById(id);
 
     if (!booking) {
-      res.status(404).json({ error: "Booking not found" });
+      res.status(404).json({ error: "Agendamento não encontrado" });
       return;
     }
 
     res.json(booking);
   } catch (error) {
     console.error("Error getting booking:", error);
-    res.status(500).json({ error: "Failed to get booking" });
+    res.status(500).json({ error: "Não foi possível obter o agendamento" });
   }
 };
 
@@ -275,42 +232,77 @@ export const handleUpdateBooking: RequestHandler = async (req, res) => {
       req.body;
 
     if (!clientName || !clientEmail || !date || !startTime || !endTime) {
-      res.status(400).json({ error: "Missing required fields" });
+      res.status(400).json({ error: "Campos obrigatórios ausentes" });
       return;
     }
 
     // Validar formato e intervalo da data
     if (!validateDate(date)) {
       res.status(400).json({
-        error: "Data inválida. A data deve ser hoje ou no futuro (formato: DD-MM-YYYY)",
+        error:
+          "Data inválida. A data deve ser hoje ou no futuro (formato: YYYY-MM-DD)",
       });
       return;
     }
 
     // Valida formato e intervalo da hora
     if (!validateTime(startTime)) {
-      res.status(400).json({ error: "Invalid start time format (use HH:mm)" });
+      res
+        .status(400)
+        .json({ error: "Horário de início inválido (use o formato HH:mm)" });
       return;
     }
 
     if (!validateTime(endTime)) {
-      res.status(400).json({ error: "Invalid end time format (use HH:mm)" });
+      res
+        .status(400)
+        .json({ error: "Horário de término inválido (use o formato HH:mm)" });
       return;
     }
 
     if (!validateTimeRange(startTime, endTime)) {
       res.status(400).json({
-        error: "End time must be after start time",
+        error: "O horário de término deve ser depois do horário de início",
       });
       return;
     }
 
     // Valida email institucional
     if (!validateInstitutionalEmail(clientEmail)) {
-      res.status(400).json({
-        error:
-          "Email must be from a Brazilian educational institution (.edu.br)",
-      });
+      res.status(400).json({ error: institutionalEmailErrorMessage() });
+      return;
+    }
+
+    const existingBooking = await getBookingById(id);
+    if (!existingBooking) {
+      res.status(404).json({ error: "Agendamento não encontrado" });
+      return;
+    }
+
+    // Se a sala foi alterada, valida que ela existe ANTES de atualizar
+    // (evita que o erro apareça como "Agendamento não encontrado")
+    if (roomId) {
+      const rooms = await getRooms();
+      const room = rooms.find((r) => String(r.id) === String(roomId));
+      if (!room) {
+        res.status(404).json({ error: "Sala não encontrada" });
+        return;
+      }
+    }
+
+    // Rejeita a atualização se colidir com OUTRO agendamento
+    const targetRoomId = roomId || existingBooking.roomId;
+    const hasConflict = await bookingExists(
+      targetRoomId,
+      date,
+      startTime,
+      endTime,
+      id,
+    );
+    if (hasConflict) {
+      res
+        .status(409)
+        .json({ error: "A sala não está disponível no horário solicitado" });
       return;
     }
 
@@ -327,9 +319,11 @@ export const handleUpdateBooking: RequestHandler = async (req, res) => {
   } catch (error) {
     console.error("Error updating booking:", error);
     if (error instanceof Error && error.message.includes("not found")) {
-      res.status(404).json({ error: "Booking not found" });
+      res.status(404).json({ error: "Agendamento não encontrado" });
     } else {
-      res.status(500).json({ error: "Failed to update booking" });
+      res
+        .status(500)
+        .json({ error: "Não foi possível atualizar o agendamento" });
     }
   }
 };
@@ -340,13 +334,13 @@ export const handleDeleteBooking: RequestHandler = async (req, res) => {
 
     const success = await deleteBookingById(id);
     if (!success) {
-      res.status(404).json({ error: "Booking not found" });
+      res.status(404).json({ error: "Agendamento não encontrado" });
       return;
     }
 
     res.json({ success: true });
   } catch (error) {
     console.error("Error deleting booking:", error);
-    res.status(500).json({ error: "Failed to delete booking" });
+    res.status(500).json({ error: "Não foi possível excluir o agendamento" });
   }
 };

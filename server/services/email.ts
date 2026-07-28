@@ -1,24 +1,34 @@
-import nodemailer from "nodemailer";
 import { Booking } from "@shared/api";
+import { escapeHtml, formatDateBR } from "../utils/validation";
+import {
+  getMailTransport,
+  getSenderAddress,
+  getSenderEmail,
+} from "./mailTransport";
 
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: "atendimentoia.naoresponda@gmail.com",
-    pass: "uxfc dpsn rnbs clpn",
-  },
-});
+function getTransporter() {
+  return getMailTransport();
+}
+
+function getAppUrl(): string {
+  return process.env.APP_URL || "http://localhost:8080";
+}
+
+function contactEmailLine(): string {
+  const email = getSenderEmail();
+  if (!email) return "";
+  return `, ou entre em contato pelo e-mail <strong>${escapeHtml(email)}</strong>`;
+}
 
 export function getEmailTemplate(booking: Booking): string {
-  const bookingLink = `${process.env.APP_URL || "http://localhost:5173"}/bookings/${booking.id}`;
-  const cancelLink = `${process.env.APP_URL || "http://localhost:5173"}/bookings/${booking.id}/cancel`;
-  const modifyLink = `${process.env.APP_URL || "http://localhost:5173"}/bookings/${booking.id}/edit`;
+  const formattedDate = formatDateBR(booking.date);
 
-  const formattedDate = new Date(booking.date).toLocaleDateString("pt-BR", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  const clientName = escapeHtml(booking.clientName);
+  const roomName = escapeHtml(booking.roomName);
+  const clientEmail = escapeHtml(booking.clientEmail);
+  const bookingId = escapeHtml(booking.id);
+  const startTime = escapeHtml(booking.startTime);
+  const endTime = escapeHtml(booking.endTime);
 
   return `
     <!DOCTYPE html>
@@ -87,27 +97,6 @@ export function getEmailTemplate(booking: Booking): string {
             border-bottom: 2px solid #667eea;
             padding-bottom: 8px;
           }
-          .actions {
-            display: flex;
-            gap: 10px;
-            margin: 20px 0;
-            flex-wrap: wrap;
-          }
-          .action-button {
-            display: inline-block;
-            padding: 12px 24px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            text-decoration: none;
-            border-radius: 6px;
-            font-weight: 600;
-            text-align: center;
-            min-width: 150px;
-          }
-          .action-button-secondary {
-            background: #e5e7eb;
-            color: #333;
-          }
           .info-box {
             background: #e0e7ff;
             border-left: 4px solid #667eea;
@@ -141,20 +130,20 @@ export function getEmailTemplate(booking: Booking): string {
           <div class="header">
             <h1>✅ Agendamento Confirmado!</h1>
           </div>
-          
+
           <div class="content">
-            <p>Olá <strong>${booking.clientName}</strong>,</p>
-            
+            <p>Olá <strong>${clientName}</strong>,</p>
+
             <p>Seu agendamento foi confirmado com sucesso! Abaixo estão os detalhes da sua reserva:</p>
-            
+
             <div class="booking-details">
               <div class="detail-row">
                 <span class="detail-label">ID da Reserva:</span>
-                <span class="detail-value"><strong>#${booking.id}</strong></span>
+                <span class="detail-value"><strong>#${bookingId}</strong></span>
               </div>
               <div class="detail-row">
                 <span class="detail-label">Sala:</span>
-                <span class="detail-value">${booking.roomName}</span>
+                <span class="detail-value">${roomName}</span>
               </div>
               <div class="detail-row">
                 <span class="detail-label">Data:</span>
@@ -162,43 +151,43 @@ export function getEmailTemplate(booking: Booking): string {
               </div>
               <div class="detail-row">
                 <span class="detail-label">Horário:</span>
-                <span class="detail-value">${booking.startTime} - ${booking.endTime}</span>
+                <span class="detail-value">${startTime} - ${endTime}</span>
               </div>
               <div class="detail-row">
                 <span class="detail-label">E-mail:</span>
-                <span class="detail-value">${booking.clientEmail}</span>
+                <span class="detail-value">${clientEmail}</span>
               </div>
             </div>
 
             <div class="section">
               <div class="section-title">Próximos Passos</div>
-              <p>Você receberá um lembrete 24 horas antes do seu agendamento. Certifique-se de chegar alguns minutos antes da hora marcada.</p>
+              <p>Certifique-se de chegar alguns minutos antes da hora marcada. Se precisar alterar ou cancelar a reserva, utilize o chatbot disponível em <a href="${getAppUrl()}">${getAppUrl()}</a>.</p>
             </div>
 
             <div class="info-box">
-              <strong>💡 Dica importante:</strong> Guarde este e-mail. Você precisará do ID da reserva (${booking.id}) para fazer qualquer alteração.
+              <strong>💡 Dica importante:</strong> Guarde este e-mail. Você precisará do ID da reserva (${bookingId}) para fazer qualquer alteração.
             </div>
 
             <div class="section">
               <div class="section-title">Como Modificar ou Cancelar sua Reserva</div>
               <p>Para modificar ou cancelar seu agendamento, basta conversar com nosso <strong>Assistente de Agendamento</strong>. Ele está disponível 24/7 para ajudá-lo.</p>
               <ul>
-                <li><strong>Para modificar:</strong> Converse com o assistente e informe o ID da sua reserva (<strong>#${booking.id}</strong>). Você pode alterar a data, hora ou sala conforme necessário.</li>
-                <li><strong>Para cancelar:</strong> Converse com o assistente e solicite o cancelamento. Informe o ID da sua reserva (<strong>#${booking.id}</strong>) para que ele identifique seu agendamento.</li>
+                <li><strong>Para modificar:</strong> Converse com o assistente e informe o ID da sua reserva (<strong>#${bookingId}</strong>). Você pode alterar a data, hora ou sala conforme necessário.</li>
+                <li><strong>Para cancelar:</strong> Converse com o assistente e solicite o cancelamento. Informe o ID da sua reserva (<strong>#${bookingId}</strong>) para que ele identifique seu agendamento.</li>
                 <li><strong>Cancelamentos:</strong> Você pode cancelar sua reserva a qualquer momento sem nenhuma penalidade.</li>
               </ul>
             </div>
 
             <div class="info-box">
-              <strong>📞 Precisa de ajuda?</strong> Converse com nosso Assistente de Agendamento disponível no site, ou entre em contato pelo e-mail <strong>atendimentoia.naoresponda@gmail.com</strong>.
+              <strong>📞 Precisa de ajuda?</strong> Converse com nosso Assistente de Agendamento disponível em <a href="${getAppUrl()}">${getAppUrl()}</a>${contactEmailLine()}.
             </div>
 
             <p>Agradecemos por escolher nossos serviços!</p>
-            <p><strong>Equipe de Agendamento</strong></p>
+            <p><strong>Equipe SalaAgenda — IOC/Fiocruz</strong></p>
 
             <div class="footer">
               <p>Este é um e-mail automático. Por favor, não responda diretamente a este e-mail.</p>
-              <p>&copy; 2024 Assistente de Agendamento. Todos os direitos reservados.</p>
+              <p>&copy; SalaAgenda — IOC/Fiocruz. Todos os direitos reservados.</p>
             </div>
           </div>
         </div>
@@ -208,11 +197,14 @@ export function getEmailTemplate(booking: Booking): string {
 }
 
 export function getCancellationEmailTemplate(booking: Booking): string {
-  const formattedDate = new Date(booking.date).toLocaleDateString("pt-BR", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  const formattedDate = formatDateBR(booking.date);
+
+  const clientName = escapeHtml(booking.clientName);
+  const roomName = escapeHtml(booking.roomName);
+  const clientEmail = escapeHtml(booking.clientEmail);
+  const bookingId = escapeHtml(booking.id);
+  const startTime = escapeHtml(booking.startTime);
+  const endTime = escapeHtml(booking.endTime);
 
   return `
     <!DOCTYPE html>
@@ -317,18 +309,18 @@ export function getCancellationEmailTemplate(booking: Booking): string {
           </div>
 
           <div class="content">
-            <p>Olá <strong>${booking.clientName}</strong>,</p>
+            <p>Olá <strong>${clientName}</strong>,</p>
 
             <p>Seu agendamento foi <strong>cancelado com sucesso</strong>. Abaixo estão os detalhes da reserva que foi cancelada:</p>
 
             <div class="booking-details">
               <div class="detail-row">
                 <span class="detail-label">ID da Reserva:</span>
-                <span class="detail-value"><strong>#${booking.id}</strong></span>
+                <span class="detail-value"><strong>#${bookingId}</strong></span>
               </div>
               <div class="detail-row">
                 <span class="detail-label">Sala:</span>
-                <span class="detail-value">${booking.roomName}</span>
+                <span class="detail-value">${roomName}</span>
               </div>
               <div class="detail-row">
                 <span class="detail-label">Data:</span>
@@ -336,11 +328,11 @@ export function getCancellationEmailTemplate(booking: Booking): string {
               </div>
               <div class="detail-row">
                 <span class="detail-label">Horário:</span>
-                <span class="detail-value">${booking.startTime} - ${booking.endTime}</span>
+                <span class="detail-value">${startTime} - ${endTime}</span>
               </div>
               <div class="detail-row">
                 <span class="detail-label">E-mail:</span>
-                <span class="detail-value">${booking.clientEmail}</span>
+                <span class="detail-value">${clientEmail}</span>
               </div>
             </div>
 
@@ -350,7 +342,7 @@ export function getCancellationEmailTemplate(booking: Booking): string {
             </div>
 
             <div class="info-box">
-              <strong>📌 Informação importante:</strong> A sala <strong>${booking.roomName}</strong> agora está disponível novamente para a data <strong>${formattedDate}</strong> das <strong>${booking.startTime} às ${booking.endTime}</strong>.
+              <strong>📌 Informação importante:</strong> A sala <strong>${roomName}</strong> agora está disponível novamente para a data <strong>${formattedDate}</strong> das <strong>${startTime} às ${endTime}</strong>.
             </div>
 
             <div class="section">
@@ -359,15 +351,15 @@ export function getCancellationEmailTemplate(booking: Booking): string {
             </div>
 
             <div class="info-box">
-              <strong>📞 Precisa de ajuda?</strong> Converse com nosso Assistente de Agendamento disponível no site, ou entre em contato pelo e-mail <strong>atendimentoia.naoresponda@gmail.com</strong>.
+              <strong>📞 Precisa de ajuda?</strong> Converse com nosso Assistente de Agendamento disponível em <a href="${getAppUrl()}">${getAppUrl()}</a>${contactEmailLine()}.
             </div>
 
             <p>Obrigado por utilizar nossos serviços!</p>
-            <p><strong>Equipe de Agendamento</strong></p>
+            <p><strong>Equipe SalaAgenda — IOC/Fiocruz</strong></p>
 
             <div class="footer">
               <p>Este é um e-mail automático. Por favor, não responda diretamente a este e-mail.</p>
-              <p>&copy; 2024 Assistente de Agendamento. Todos os direitos reservados.</p>
+              <p>&copy; SalaAgenda — IOC/Fiocruz. Todos os direitos reservados.</p>
             </div>
           </div>
         </div>
@@ -376,44 +368,53 @@ export function getCancellationEmailTemplate(booking: Booking): string {
   `;
 }
 
+/**
+ * Envia o email de confirmação. Falhas são apenas registradas em log —
+ * nunca devem impedir a criação do agendamento.
+ */
 export async function sendBookingConfirmationEmail(
   booking: Booking,
 ): Promise<void> {
+  const mailer = getTransporter();
+  if (!mailer) {
+    return;
+  }
+
   try {
     const htmlContent = getEmailTemplate(booking);
 
-    const mailOptions = {
-      from: "atendimentoia.naoresponda@gmail.com",
+    await mailer.sendMail({
+      from: getSenderAddress() ?? undefined,
       to: booking.clientEmail,
       subject: `Agendamento Confirmado - ID: #${booking.id}`,
       html: htmlContent,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    console.log("Email enviado com sucesso:", info.response);
+    });
   } catch (error) {
-    console.error("Erro ao enviar email:", error);
-    throw error;
+    console.error("Erro ao enviar email de confirmação:", error);
   }
 }
 
+/**
+ * Envia o email de cancelamento. Falhas são apenas registradas em log.
+ */
 export async function sendBookingCancellationEmail(
   booking: Booking,
 ): Promise<void> {
+  const mailer = getTransporter();
+  if (!mailer) {
+    return;
+  }
+
   try {
     const htmlContent = getCancellationEmailTemplate(booking);
 
-    const mailOptions = {
-      from: "atendimentoia.naoresponda@gmail.com",
+    await mailer.sendMail({
+      from: getSenderAddress() ?? undefined,
       to: booking.clientEmail,
       subject: `Agendamento Cancelado - ID: #${booking.id}`,
       html: htmlContent,
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    console.log("Email de cancelamento enviado com sucesso:", info.response);
+    });
   } catch (error) {
     console.error("Erro ao enviar email de cancelamento:", error);
-    throw error;
   }
 }

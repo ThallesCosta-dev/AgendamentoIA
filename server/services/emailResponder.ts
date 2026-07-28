@@ -1,20 +1,48 @@
-import nodemailer from "nodemailer";
 import { Booking } from "@shared/api";
 import { getRooms } from "../data";
 import { logEmailResponse } from "../utils/emailLogger";
-import { ExtractedBookingData, EmailClassificationResult } from "./emailClassifier";
+import { ExtractedBookingData } from "./emailClassifier";
 import { createEmailLogger } from "../utils/emailLogger";
+import {
+  escapeHtml,
+  formatDateBR,
+  getAllowedEmailDomains,
+} from "../utils/validation";
+import {
+  getMailTransport,
+  getSenderAddress,
+  getSenderEmail,
+} from "./mailTransport";
 
 const logger = createEmailLogger("EmailResponder");
 
-// Configure email transporter using existing email service configuration
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER || "atendimentoia.naoresponda@gmail.com",
-    pass: process.env.EMAIL_PASSWORD || "uxfc dpsn rnbs clpn",
-  },
-});
+function getTransporter() {
+  return getMailTransport();
+}
+
+function allowedDomainsText(): string {
+  return getAllowedEmailDomains().join(", ");
+}
+
+/** URL pública da aplicação (mesma lógica de services/email.ts). */
+function getAppUrl(): string {
+  return process.env.APP_URL || "http://localhost:8080";
+}
+
+/**
+ * Monta o assunto de resposta sem empilhar "Re: " quando o assunto original
+ * já começa com "Re:" (caso-insensível).
+ */
+function buildReplySubject(originalSubject: string): string {
+  return /^re:/i.test(originalSubject.trim())
+    ? originalSubject
+    : `Re: ${originalSubject}`;
+}
+
+function contactEmailHtml(): string {
+  const email = getSenderEmail();
+  return email ? escapeHtml(email) : "";
+}
 
 export interface ResponseData {
   to: string;
@@ -29,9 +57,14 @@ export async function generateInformationRequestResponse(
   originalSubject?: string
 ): Promise<ResponseData> {
   const rooms = await getRooms();
-  const roomsList = rooms.map(room => `- ${room.name} (capacidade: ${room.capacity} pessoas)`).join("\\n");
+  const roomsListItems = rooms
+    .map(
+      (room) =>
+        `<div class="list-item">- ${escapeHtml(room.name)} (capacidade: ${escapeHtml(room.capacity)} pessoas)</div>`,
+    )
+    .join("\n");
 
-  const subject = originalSubject ? `Re: ${originalSubject}` : "Informações sobre Reservas - IOC Fiocruz";
+  const subject = originalSubject ? buildReplySubject(originalSubject) : "Informações sobre Reservas - SalaAgenda IOC/Fiocruz";
 
   const htmlContent = `
     <!DOCTYPE html>
@@ -113,13 +146,13 @@ export async function generateInformationRequestResponse(
       <body>
         <div class="container">
           <div class="header">
-            <h1>📋 Sistema de Reservas IOC-Fiocruz</h1>
+            <h1>📋 SalaAgenda — Sistema de Reservas IOC/Fiocruz</h1>
           </div>
 
           <div class="content">
             <p>Prezado(a) Solicitante,</p>
 
-            <p>Agradecemos seu contato com o sistema de reservas do IOC-Fiocruz.</p>
+            <p>Agradecemos seu contato com o SalaAgenda, o sistema de reservas do IOC/Fiocruz.</p>
 
             <div class="section">
               <div class="section-title">Como Solicitar uma Reserva</div>
@@ -127,7 +160,7 @@ export async function generateInformationRequestResponse(
 
               <div class="list">
                 <div class="list-item"><strong>Nome completo:</strong> Seu nome completo</div>
-                <div class="list-item"><strong>Email institucional:</strong> Seu email .edu.br</div>
+                <div class="list-item"><strong>Email institucional:</strong> Domínios aceitos: ${allowedDomainsText()}</div>
                 <div class="list-item"><strong>Sala desejada:</strong> Nome da sala</div>
                 <div class="list-item"><strong>Data:</strong> Data da reserva (DD/MM/AAAA)</div>
                 <div class="list-item"><strong>Horário:</strong> Início - Término</div>
@@ -137,7 +170,7 @@ export async function generateInformationRequestResponse(
             <div class="section">
               <div class="section-title">Salas Disponíveis</div>
               <div class="list">
-                ${roomsList.split("\\n").map(item => `<div class="list-item">${item}</div>`).join("")}
+                ${roomsListItems}
               </div>
             </div>
 
@@ -148,16 +181,16 @@ export async function generateInformationRequestResponse(
             <div class="section">
               <div class="section-title">Outras Formas de Contato</div>
               <p>• <strong>Chatbot:</strong> Disponível 24/7 em nosso sistema</p>
-              <p>• <strong>Email:</strong> atendimentoia.naoresponda@gmail.com</p>
+              <p>• <strong>Email:</strong> ${contactEmailHtml()}</p>
               <p>• <strong>Horário de atendimento:</strong> Segunda a Sexta, 8h às 18h</p>
             </div>
 
             <p>Atenciosamente,</p>
-            <p><strong>Equipe de Reservas IOC-Fiocruz</strong></p>
+            <p><strong>Equipe de Reservas — IOC/Fiocruz</strong></p>
 
             <div class="footer">
               <p>Este é um email automático. Responda diretamente a este email para solicitar sua reserva.</p>
-              <p>&copy; 2024 IOC-Fiocruz. Todos os direitos reservados.</p>
+              <p>&copy; SalaAgenda — IOC/Fiocruz. Todos os direitos reservados.</p>
             </div>
           </div>
         </div>
@@ -180,20 +213,20 @@ export async function generateIncompleteBookingResponse(
   missingFields: string[],
   originalSubject?: string
 ): Promise<ResponseData> {
-  const providedInfo = [];
+  const providedInfo: string[] = [];
 
-  if (extractedData.clientName) providedInfo.push(`Nome: ${extractedData.clientName}`);
-  if (extractedData.clientEmail) providedInfo.push(`Email: ${extractedData.clientEmail}`);
-  if (extractedData.roomName) providedInfo.push(`Sala: ${extractedData.roomName}`);
+  if (extractedData.clientName) providedInfo.push(`Nome: ${escapeHtml(extractedData.clientName)}`);
+  if (extractedData.clientEmail) providedInfo.push(`Email: ${escapeHtml(extractedData.clientEmail)}`);
+  if (extractedData.roomName) providedInfo.push(`Sala: ${escapeHtml(extractedData.roomName)}`);
   if (extractedData.date) {
-    const [year, month, day] = extractedData.date.split("-");
-    providedInfo.push(`Data: ${day}/${month}/${year}`);
+    const [year, month, day] = String(extractedData.date).split("-");
+    providedInfo.push(`Data: ${escapeHtml(`${day}/${month}/${year}`)}`);
   }
   if (extractedData.startTime && extractedData.endTime) {
-    providedInfo.push(`Horário: ${extractedData.startTime} - ${extractedData.endTime}`);
+    providedInfo.push(`Horário: ${escapeHtml(extractedData.startTime)} - ${escapeHtml(extractedData.endTime)}`);
   }
 
-  const subject = originalSubject ? `Re: ${originalSubject}` : "Informações Adicionais Necessárias - Reserva IOC Fiocruz";
+  const subject = originalSubject ? buildReplySubject(originalSubject) : "Informações Adicionais Necessárias - Reserva SalaAgenda IOC/Fiocruz";
 
   const htmlContent = `
     <!DOCTYPE html>
@@ -283,7 +316,7 @@ export async function generateIncompleteBookingResponse(
           </div>
 
           <div class="content">
-            <p>Prezado(a) ${extractedData.clientName || "Solicitante"},</p>
+            <p>Prezado(a) ${escapeHtml(extractedData.clientName || "Solicitante")},</p>
 
             <p>Recebemos sua solicitação de reserva e precisamos de algumas informações adicionais:</p>
 
@@ -299,14 +332,14 @@ export async function generateIncompleteBookingResponse(
             <div class="section">
               <div class="section-title">Informações Pendentes</div>
               <div class="list">
-                ${missingFields.map(field => `<div class="list-item"><span class="missing-field">❌ ${field}</span></div>`).join("")}
+                ${missingFields.map(field => `<div class="list-item"><span class="missing-field">❌ ${escapeHtml(field)}</span></div>`).join("")}
               </div>
             </div>
 
             <div class="info-box">
               <strong>📝 Como completar sua reserva:</strong> Responda a este email com as informações que faltam. Exemplo:<br><br>
               <em>Nome: João da Silva<br>
-              Email: joao@universidade.edu.br<br>
+              Email: joao.silva@ioc.fiocruz.br<br>
               Sala: Sala 101<br>
               Data: 15/02/2025<br>
               Horário: 14:00 - 16:00</em>
@@ -315,7 +348,7 @@ export async function generateIncompleteBookingResponse(
             <div class="section">
               <div class="section-title">Requisitos Importantes</div>
               <div class="list">
-                <div class="list-item">• Utilize email institucional (.edu.br)</div>
+                <div class="list-item">• Utilize email institucional (domínios aceitos: ${allowedDomainsText()})</div>
                 <div class="list-item">• A data deve ser hoje ou futura</div>
                 <div class="list-item">• O horário final deve ser após o inicial</div>
                 <div class="list-item">• Verifique a disponibilidade da sala desejada</div>
@@ -325,11 +358,11 @@ export async function generateIncompleteBookingResponse(
             <p>Após receber todas as informações, processaremos sua reserva automaticamente e enviaremos a confirmação.</p>
 
             <p>Atenciosamente,</p>
-            <p><strong>Equipe de Reservas IOC-Fiocruz</strong></p>
+            <p><strong>Equipe de Reservas — IOC/Fiocruz</strong></p>
 
             <div class="footer">
               <p>Este é um email automático. Responda diretamente a este email com as informações adicionais.</p>
-              <p>&copy; 2024 IOC-Fiocruz. Todos os direitos reservados.</p>
+              <p>&copy; SalaAgenda — IOC/Fiocruz. Todos os direitos reservados.</p>
             </div>
           </div>
         </div>
@@ -351,11 +384,7 @@ export async function generateBookingConfirmationResponse(
   booking: Booking,
   originalSubject?: string
 ): Promise<ResponseData> {
-  const formattedDate = new Date(booking.date).toLocaleDateString("pt-BR", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  const formattedDate = formatDateBR(booking.date);
 
   const subject = `Confirmação de Reserva - ID: #${booking.id}`;
 
@@ -443,18 +472,18 @@ export async function generateBookingConfirmationResponse(
           </div>
 
           <div class="content">
-            <p>Prezado(a) <strong>${booking.clientName}</strong>,</p>
+            <p>Prezado(a) <strong>${escapeHtml(booking.clientName)}</strong>,</p>
 
             <p>Sua reserva foi processada automaticamente a partir do seu email e confirmada com sucesso!</p>
 
             <div class="booking-details">
               <div class="detail-row">
                 <span class="detail-label">ID da Reserva:</span>
-                <span class="detail-value"><strong>#${booking.id}</strong></span>
+                <span class="detail-value"><strong>#${escapeHtml(booking.id)}</strong></span>
               </div>
               <div class="detail-row">
                 <span class="detail-label">Sala:</span>
-                <span class="detail-value">${booking.roomName}</span>
+                <span class="detail-value">${escapeHtml(booking.roomName)}</span>
               </div>
               <div class="detail-row">
                 <span class="detail-label">Data:</span>
@@ -462,32 +491,31 @@ export async function generateBookingConfirmationResponse(
               </div>
               <div class="detail-row">
                 <span class="detail-label">Horário:</span>
-                <span class="detail-value">${booking.startTime} - ${booking.endTime}</span>
+                <span class="detail-value">${escapeHtml(booking.startTime)} - ${escapeHtml(booking.endTime)}</span>
               </div>
               <div class="detail-row">
                 <span class="detail-label">E-mail:</span>
-                <span class="detail-value">${booking.clientEmail}</span>
+                <span class="detail-value">${escapeHtml(booking.clientEmail)}</span>
               </div>
             </div>
 
             <div class="info-box">
               <strong>💡 Informações Importantes:</strong>
               <ul>
-                <li>Guarde o ID da reserva (<strong>#${booking.id}</strong>) para referência</li>
+                <li>Guarde o ID da reserva (<strong>#${escapeHtml(booking.id)}</strong>) para referência</li>
                 <li>Chegue 10 minutos antes do horário agendado</li>
-                <li>Para cancelar ou modificar, responda a este email</li>
-                <li>O sistema enviará um lembrete 24h antes do evento</li>
+                <li>Para cancelar ou modificar, utilize o chatbot disponível em <a href="${getAppUrl()}">${getAppUrl()}</a>, informando o ID da reserva</li>
               </ul>
             </div>
 
             <p>Sua reserva foi registrada em nosso sistema e já está confirmada. Não há necessidade de nenhuma ação adicional.</p>
 
             <p>Atenciosamente,</p>
-            <p><strong>Equipe de Reservas IOC-Fiocruz</strong></p>
+            <p><strong>Equipe de Reservas — IOC/Fiocruz</strong></p>
 
             <div class="footer">
-              <p>Este é um email automático. Para cancelar ou modificar, responda a este email.</p>
-              <p>&copy; 2024 IOC-Fiocruz. Todos os direitos reservados.</p>
+              <p>Este é um email automático. Para cancelar ou modificar sua reserva, utilize o chatbot em <a href="${getAppUrl()}">${getAppUrl()}</a>.</p>
+              <p>&copy; SalaAgenda — IOC/Fiocruz. Todos os direitos reservados.</p>
             </div>
           </div>
         </div>
@@ -509,7 +537,7 @@ export async function generateErrorResponse(
   errorMessage: string,
   originalSubject?: string
 ): Promise<ResponseData> {
-  const subject = originalSubject ? `Re: ${originalSubject}` : "Erro no Processamento - Reserva IOC Fiocruz";
+  const subject = originalSubject ? buildReplySubject(originalSubject) : "Erro no Processamento - Reserva SalaAgenda IOC/Fiocruz";
 
   const htmlContent = `
     <!DOCTYPE html>
@@ -584,14 +612,14 @@ export async function generateErrorResponse(
             <p>Encontramos um problema ao processar sua solicitação de reserva:</p>
 
             <div class="error-box">
-              <strong>❌ Erro:</strong> ${errorMessage}
+              <strong>❌ Erro:</strong> ${escapeHtml(errorMessage)}
             </div>
 
             <div class="info-box">
               <strong>📞 O que fazer agora:</strong>
               <ul>
                 <li>Verifique se todas as informações estão corretas</li>
-                <li>Confirme que o email é institucional (.edu.br)</li>
+                <li>Confirme que o email é institucional (domínios aceitos: ${allowedDomainsText()})</li>
                 <li>Tente enviar a solicitação novamente</li>
                 <li>Se o problema persistir, contate nosso suporte</li>
               </ul>
@@ -600,18 +628,18 @@ export async function generateErrorResponse(
             <p>Para ajudar-nos a resolver o problema, você pode:</p>
             <ul>
               <li>Responder este email com a solicitação corrigida</li>
-              <li>Entrar em contato diretamente: atendimentoia.naoresponda@gmail.com</li>
+              <li>Entrar em contato diretamente: ${contactEmailHtml()}</li>
               <li>Usar nosso sistema de reservas online</li>
             </ul>
 
             <p>Lamentamos o inconveniente e agradecemos sua compreensão.</p>
 
             <p>Atenciosamente,</p>
-            <p><strong>Equipe de Suporte IOC-Fiocruz</strong></p>
+            <p><strong>Equipe de Suporte — IOC/Fiocruz</strong></p>
 
             <div class="footer">
               <p>Este é um email automático. Responda para obter ajuda adicional.</p>
-              <p>&copy; 2024 IOC-Fiocruz. Todos os direitos reservados.</p>
+              <p>&copy; SalaAgenda — IOC/Fiocruz. Todos os direitos reservados.</p>
             </div>
           </div>
         </div>
@@ -629,16 +657,27 @@ export async function generateErrorResponse(
 }
 
 export async function sendEmailResponse(responseData: ResponseData, emailLogId?: number): Promise<boolean> {
+  const mailer = getTransporter();
+  if (!mailer) {
+    logger.warn("Resposta de email não enviada — credenciais não configuradas", {
+      to: responseData.to,
+      type: responseData.type,
+    });
+    return false;
+  }
+
   try {
     const mailOptions = {
-      from: process.env.EMAIL_USER || "atendimentoia.naoresponda@gmail.com",
+      from: getSenderAddress() ?? undefined,
       to: responseData.to,
       subject: responseData.subject,
       html: responseData.htmlContent,
-      replyTo: process.env.EMAIL_USER || "atendimentoia.naoresponda@gmail.com"
+      replyTo: getSenderEmail() ?? undefined,
+      // RFC 3834: identifica respostas automáticas (evita loops de auto-reply)
+      headers: { "Auto-Submitted": "auto-replied" }
     };
 
-    const info = await transporter.sendMail(mailOptions);
+    const info = await mailer.sendMail(mailOptions);
     logger.info("Email response sent successfully", {
       messageId: info.messageId,
       to: responseData.to,
