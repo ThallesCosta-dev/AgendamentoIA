@@ -160,6 +160,12 @@ export function createServer() {
     res.json({ message: ping });
   });
 
+  // 404 JSON para caminhos /api não mapeados — sem este guard, a requisição
+  // cai no fallback SPA e o cliente de API recebe HTML com status 200
+  app.use("/api", (_req, res) => {
+    res.status(404).json({ error: "Endpoint não encontrado" });
+  });
+
   // Handler global de erros (JSON, PT-BR). Trata inclusive JSON malformado
   // no corpo da requisição (SyntaxError do express.json → 400).
   app.use(
