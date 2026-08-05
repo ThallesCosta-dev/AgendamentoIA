@@ -1,11 +1,11 @@
 # Guia do Usuário - SalaAgenda
 
-Bem-vindo ao SalaAgenda! Este guia ajudará você a agendar salas para sua defesa de tese de forma rápida e fácil.
+Bem-vindo ao SalaAgenda! Este guia ajudará você a agendar salas de forma rápida e fácil.
 
 ## 🎯 O que é SalaAgenda?
 
 SalaAgenda é um assistente inteligente que ajuda você a:
-- **Agendar salas** para defesa de tese
+- **Agendar salas** de forma simples
 - **Verificar disponibilidade** em tempo real
 - **Gerenciar reservas** (modificar ou cancelar)
 - **Receber confirmações** por email
@@ -25,12 +25,12 @@ Tudo isso através de uma conversa natural com um chatbot!
 ```
 ┌─────────────────────────────────────────┐
 │  Assistente de Agendamento         [⊕]  │
-│  Reserve sua sala de defesa de tese     │
-├───���─────────────────────────────────────┤
+│  Reserve sua sala de forma rápida       │
+├─────────────────────────────────────────┤
 │                                         │
 │  Bot: Olá! 👋 Bem-vindo ao            │
-│  assistente de agendamento de salas     │
-│  para defesa de tese...                 │
+│  assistente de agendamento de           │
+│  salas...                               │
 │                                         │
 │  Digite sua resposta...           [→]   │
 └─────────────────────────────────────────┘
@@ -172,7 +172,7 @@ O chatbot entende linguagem natural! Você pode:
 
 ### Correção de Dados
 Se erra uma informação:
-- Digite a informação correta no pr��ximo mensagem
+- Digite a informação correta na próxima mensagem
 - O sistema aceitará a última informação válida
 
 ### Múltiplos Agendamentos
@@ -275,7 +275,7 @@ Deseja confirmar?
 
 Você: Sim
 
-Bot: ✅ Perfeito! Sua defesa foi agendada com sucesso!
+Bot: ✅ Perfeito! Sua sala foi reservada com sucesso!
 📌 **ID da Reserva: #12345**
 
 Confirmação enviada para: maria.silva@universidade.edu.br
@@ -299,18 +299,17 @@ Encontrou um problema?
 - [ ] Horário final é depois do horário inicial?
 - [ ] Data é hoje ou no futuro?
 
-## 🎓 Próximas Etapas
+## ✅ Próximas Etapas
 
 Após agendar:
 1. Procure pela confirmação de email
 2. Salve o ID da reserva
-3. Prepare-se para sua defesa
-4. Se precisar mudar, converse com o bot
-5. Compareça 15 minutos antes do horário
+3. Se precisar mudar, converse com o bot
+4. Compareça 15 minutos antes do horário
 
 ---
 
 **Versão**: 1.0.0
 **Última atualização**: 2026
 
-Boa defesa! 🎓
+Bom agendamento! 📅

@@ -245,7 +245,7 @@ export default function Chatbot() {
       id: `msg-${messageCounterRef.current}`,
       type: "bot",
       content:
-        "Olá! 👋 Bem-vindo ao assistente de agendamento de salas para defesa de tese. Estou aqui para ajudá-lo a reservar uma sala. Por favor, comece nos informando seu nome completo.",
+        "Olá! 👋 Bem-vindo ao assistente de agendamento de salas. Estou aqui para ajudá-lo a reservar uma sala. Por favor, comece nos informando seu nome completo.",
       timestamp: new Date(),
       role: "assistant",
     };
@@ -1403,7 +1403,7 @@ export default function Chatbot() {
           // Formatar data sem problemas de fuso horário
           const [year, month, day] = bookingData.date.split("-");
           const formattedDate = `${day}/${month}/${year}`;
-          const successMessage = `✅ Perfeito! Sua defesa foi agendada com sucesso!\n\n🎫 **ID da Reserva: #${bookingIdText}**\n(Anote ou copie este ID — ele é necessário para modificar ou cancelar a reserva.)\n\nDetalhes da Reserva:\n📍 Sala: ${data.booking.roomName}\n📅 Data: ${formattedDate}\n⏰ Horário: ${bookingData.startTime} - ${bookingData.endTime}\n📧 Confirmação enviada para: ${bookingData.email}\n\nObrigado por usar o SalaAgenda!`;
+          const successMessage = `✅ Perfeito! Sua sala foi reservada com sucesso!\n\n🎫 **ID da Reserva: #${bookingIdText}**\n(Anote ou copie este ID — ele é necessário para modificar ou cancelar a reserva.)\n\nDetalhes da Reserva:\n📍 Sala: ${data.booking.roomName}\n📅 Data: ${formattedDate}\n⏰ Horário: ${bookingData.startTime} - ${bookingData.endTime}\n📧 Confirmação enviada para: ${bookingData.email}\n\nObrigado por usar o SalaAgenda!`;
 
           addBotMessage(successMessage);
           // Mantém o histórico da IA em sincronia: a reserva foi concluída
@@ -1513,7 +1513,7 @@ export default function Chatbot() {
             Assistente de Agendamento
           </h1>
           <p className="text-sm text-muted-foreground">
-            Reserve sua sala de defesa de tese
+            Reserve sua sala de forma rápida e simples
           </p>
         </div>
       </div>

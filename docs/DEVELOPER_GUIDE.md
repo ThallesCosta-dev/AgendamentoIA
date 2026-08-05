@@ -5,7 +5,7 @@ Este guia descreve como desenvolver, estender e manter a aplicação SalaAgenda.
 ## 🏗️ Arquitetura Geral
 
 ```
-┌──────────────────���──────────────────────┐
+┌─────────────────────────────────────────┐
 │         Cliente (React/TypeScript)      │
 │  ┌──────────────────────────────────┐  │
 │  │ Chatbot | Admin Panel | Pages    │  │
@@ -48,7 +48,7 @@ salaagenda/
 │   ├── hooks/
 │   │   ├── use-mobile.tsx       # Hook para responsividade
 │   │   └── use-toast.ts         # Hook para notificações
-│   ├─��� lib/
+│   ├── lib/
 │   │   └── utils.ts             # Funções utilitárias
 │   ├── pages/
 │   │   ├── Index.tsx            # Página inicial (chatbot)
@@ -156,7 +156,7 @@ git push origin feature/sua-feature
 
 #### Frontend (React)
 - Arquivos em `client/`
-- Altera��ões em `client/pages/` para novas rotas
+- Alterações em `client/pages/` para novas rotas
 - Alterações em `client/components/` para novos componentes
 
 #### Backend (Express)

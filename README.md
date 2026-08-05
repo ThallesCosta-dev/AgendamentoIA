@@ -4,7 +4,7 @@
 ![Versão](https://img.shields.io/badge/versão-1.0.0-blue)
 ![Licença](https://img.shields.io/badge/licença-MIT-green)
 
-**SalaAgenda** é uma aplicação web moderna para agendamento de salas de defesa de tese em instituições educacionais. Oferece uma interface conversacional intuitiva através de um chatbot alimentado por IA, além de um painel administrativo robusto para gerenciar salas e reservas.
+**SalaAgenda** é uma aplicação web moderna para agendamento de salas. Oferece uma interface conversacional intuitiva através de um chatbot alimentado por IA, além de um painel administrativo robusto para gerenciar salas e reservas.
 
 ## 🎯 Características Principais
 

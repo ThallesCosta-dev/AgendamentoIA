@@ -19,7 +19,7 @@ O login é validado **no servidor** e retorna um token de sessão com validade d
 ```
 ┌────────────────────────────────────────────┐
 │  SalaAgenda  [Chatbot] [Admin] [Sair]      │
-├──────────────┬─────��────────────────────────┤
+├──────────────┬──────────────────────────────┤
 │              │                              │
 │  SALAS       │  Aba 1: Salas              │
 │  AGENDAMENTOS│  Aba 2: Agendamentos       │
@@ -38,7 +38,7 @@ A aba "Salas" mostra uma tabela com todas as salas cadastradas:
 | ID | Nome | Capacidade | Ações |
 |----|----|-----------|--------|
 | 1 | Sala 101 | 30 | ✏️ Editar, 🗑️ Deletar |
-| 2 | Auditório Principal | 100 | ✏️ Editar, 🗑�� Deletar |
+| 2 | Auditório Principal | 100 | ✏️ Editar, 🗑️ Deletar |
 | 3 | Sala de Conferência A | 20 | ✏️ Editar, 🗑️ Deletar |
 
 ### Criar Nova Sala
@@ -149,7 +149,7 @@ A página inicial do painel mostra:
 
 - **Total de Salas**: Número total de salas cadastradas
 - **Total de Agendamentos**: Agendamentos atuais
-- **Próximos Agendamentos**: Próximas defesas agendadas
+- **Próximos Agendamentos**: Próximas reservas agendadas
 - **Salas Disponíveis Hoje**: Salas livres hoje
 
 ## ⚙️ Configurações e Segurança
@@ -247,7 +247,7 @@ O sistema automaticamente:
 
 1. **Gerar relatório**: Listar agendamentos da semana
 2. **Revisar salas**: Verificar capacidade e equipamento
-3. **Comunicar defesas**: Notificar professores e alunos
+3. **Comunicar reservas**: Notificar os usuários envolvidos
 4. **Manutenção**: Atualizar salas conforme necessário
 
 ### Rotina Mensal

@@ -1,7 +1,7 @@
 {
   "name": "salaagenda",
   "version": "1.0.0",
-  "description": "SalaAgenda — sistema de agendamento de salas de defesa (IOC/Fiocruz)",
+  "description": "SalaAgenda — sistema de agendamento de salas (IOC/Fiocruz)",
   "private": true,
   "type": "module",
   "scripts": {

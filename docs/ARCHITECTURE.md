@@ -2,7 +2,7 @@
 
 Este documento descreve a arquitetura técnica e decisões de design da aplicação SalaAgenda.
 
-## 🏗��� Visão Geral
+## 🏗️ Visão Geral
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -20,7 +20,7 @@ Este documento descreve a arquitetura técnica e decisões de design da aplicaç
                   HTTP REST API
                   (JSON over HTTP)
                         ↓↑
-┌──────────���──────────────────────────────────────────────┐
+┌─────────────────────────────────────────────────────────┐
 │                 SERVIDOR (Node.js/Express)              │
 │                                                          │
 │  ┌─────────────────────────────────────────────────────┐│
@@ -36,7 +36,7 @@ Este documento descreve a arquitetura técnica e decisões de design da aplicaç
 │  │  • Data Access Objs  • Groq Integration             ││
 │  └─────────────────────────────────────────────────────┘│
 │                        ↓                                │
-│  ┌────────────��────────────────────────────────────────┐│
+│  ┌─────────────────────────────────────────────────────┐│
 │  │        Data Access Layer (server/data.ts)           ││
 │  │  getRooms()          createBooking()                ││
 │  │  getBookings()       updateBooking()                ││
